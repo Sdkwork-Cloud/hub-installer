@@ -1,0 +1,59 @@
+schemaVersion: "1.0"
+$schema: "../../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "OpenClaw Install (Installer CLI Script)"
+  version: "2026.03.08"
+  description: "Install OpenClaw with install-cli.sh into a local prefix."
+  homepage: "https://docs.openclaw.ai/install/installer"
+platforms:
+  - macos
+  - ubuntu
+variables:
+  hub_software_name: "openclaw"
+  hub_install_control_level: "managed"
+  openclaw_channel: "latest"
+  openclaw_onboard: "false"
+  openclaw_install_prefix: "{{hub_install_root}}"
+  openclaw_install_cli_node_version: "22.22.0"
+  openclaw_install_cli_json: "false"
+  openclaw_install_cli_set_npm_prefix: "false"
+defaults:
+  sudo: true
+  timeoutMs: 1800000
+  env:
+    SHARP_IGNORE_GLOBAL_LIBVIPS: "1"
+lifecycle:
+  preflight:
+    - id: "show-openclaw-installer-cli-profile"
+      shell: bash
+      run: "echo OpenClaw profile=installer-cli-script prefix={{openclaw_install_prefix}} channel={{openclaw_channel}} onboard={{openclaw_onboard}} json={{openclaw_install_cli_json}} set_npm_prefix={{openclaw_install_cli_set_npm_prefix}}"
+  healthcheck:
+    - id: "openclaw-installer-cli-health"
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ -x "{{openclaw_install_prefix}}/bin/openclaw" ]; then
+          "{{openclaw_install_prefix}}/bin/openclaw" --version
+        else
+          openclaw --version
+        fi
+artifacts:
+  - id: "openclaw-installer-cli-unix"
+    type: "command"
+    commands:
+      - id: "run-openclaw-installer-cli-unix"
+        shell: bash
+        run: |
+          set -euo pipefail
+          extra_flags=""
+          if [ "{{openclaw_install_cli_json}}" = "true" ]; then
+            extra_flags="$extra_flags --json"
+          fi
+          if [ "{{openclaw_install_cli_set_npm_prefix}}" = "true" ]; then
+            extra_flags="$extra_flags --set-npm-prefix"
+          fi
+          if [ "{{openclaw_onboard}}" = "true" ]; then
+            curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install-cli.sh | bash -s -- --prefix "{{openclaw_install_prefix}}" --version "{{openclaw_channel}}" --node-version "{{openclaw_install_cli_node_version}}" --onboard $extra_flags
+          else
+            curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install-cli.sh | bash -s -- --prefix "{{openclaw_install_prefix}}" --version "{{openclaw_channel}}" --node-version "{{openclaw_install_cli_node_version}}" --no-onboard $extra_flags
+          fi

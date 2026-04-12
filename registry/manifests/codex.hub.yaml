@@ -1,0 +1,313 @@
+schemaVersion: "1.0"
+$schema: "../../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "Codex Install (Source + DotSlash)"
+  version: "2026.03.08"
+  description: "Install Codex from Rust source or via the GitHub release DotSlash bootstrap file."
+  homepage: "https://github.com/openai/codex"
+platforms:
+  - windows
+  - macos
+  - ubuntu
+variables:
+  hub_software_name: "codex"
+  hub_install_control_level: "managed"
+  codex_install_method: "source-build"
+  codex_source_dir: "{{hub_work_root}}"
+  codex_git_ref: "main"
+  codex_release_tag: "latest"
+  codex_install_just: "true"
+  codex_install_nextest: "false"
+  codex_binary_link: "{{hub_bin_dir}}/codex"
+  codex_dotslash_target: "{{hub_bin_dir}}/codex"
+  codex_wsl_source_dir: "{{hub_work_root}}"
+  codex_wsl_binary_link: "{{hub_bin_dir}}/codex"
+  codex_wsl_dotslash_target: "{{hub_bin_dir}}/codex"
+defaults:
+  sudo: true
+  timeoutMs: 3600000
+installation:
+  method:
+    id: "source-build"
+    label: "Rust source build"
+    type: "source"
+    summary: "Clone the Codex repository, build the Rust CLI locally, and copy the binary into the managed bin directory."
+    supported: true
+    documentationUrl: "https://github.com/openai/codex"
+    notes:
+      - "Windows hosts are expected to use WSL for the documented source-build workflow."
+  alternatives:
+    - id: "dotslash-release"
+      label: "Release bootstrap binary"
+      type: "binary"
+      summary: "Download the published Codex bootstrap binary from GitHub releases."
+      supported: true
+    - id: "npm-global"
+      label: "npm global install"
+      type: "package"
+      summary: "Documented upstream install path using `npm install -g @openai/codex`."
+      supported: false
+    - id: "brew-cask"
+      label: "Homebrew cask"
+      type: "package"
+      summary: "Documented upstream install path using `brew install --cask codex`."
+      supported: false
+  directories:
+    installRoot:
+      path: "{{hub_install_root}}"
+      customizable: true
+      purpose: "Managed installation root for copied Codex binaries."
+    workRoot:
+      path: "{{hub_work_root}}"
+      customizable: true
+      purpose: "Repository checkout directory for source builds."
+    binDir:
+      path: "{{hub_bin_dir}}"
+      customizable: true
+      purpose: "Directory where the Codex executable is exposed."
+    additional:
+      - id: "codex-home"
+        path: "~/.codex"
+        customizable: false
+        purpose: "User-scoped Codex configuration and logs."
+dataLayout:
+  items:
+    - id: "codex-config"
+      title: "Codex config file"
+      kind: "file"
+      path: "~/.codex/config.toml"
+      description: "Primary Codex configuration including model, sandbox, and MCP server settings."
+      includes:
+        - "config.toml"
+      sensitive: true
+      backupByDefault: true
+      uninstallByDefault: "preserve"
+    - id: "codex-logs"
+      title: "Codex log directory"
+      kind: "log"
+      path: "~/.codex/log"
+      description: "Codex runtime logs including `codex-tui.log`."
+      includes:
+        - "codex-tui.log"
+      sensitive: false
+      backupByDefault: false
+      uninstallByDefault: "preserve"
+    - id: "codex-sqlite-state"
+      title: "Codex SQLite state database"
+      kind: "database"
+      description: "SQLite-backed Codex state stored under `sqlite_home`, `CODEX_SQLITE_HOME`, or the default CODEX_HOME-dependent location."
+      includes:
+        - "session state"
+        - "approval records"
+      sensitive: true
+      backupByDefault: true
+      uninstallByDefault: "preserve"
+migration:
+  strategies:
+    - id: "carry-forward-codex-home"
+      source: "codex"
+      title: "Carry forward Codex configuration and state"
+      mode: "manual"
+      summary: "Reuse `~/.codex/config.toml` and the configured SQLite state location when moving to a new machine."
+      supported: true
+      dataItemIds:
+        - "codex-config"
+        - "codex-logs"
+        - "codex-sqlite-state"
+      warnings:
+        - "WorkspaceWrite sandbox sessions may have used temporary SQLite locations unless `sqlite_home` or `CODEX_SQLITE_HOME` was pinned."
+lifecycle:
+  preflight:
+    - id: "show-codex-method-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: "echo Codex install method={{codex_install_method}} git_ref={{codex_git_ref}} release_tag={{codex_release_tag}}"
+    - id: "show-codex-method-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: "Write-Host \"Codex install method={{codex_install_method}} git_ref={{codex_git_ref}} release_tag={{codex_release_tag}}\""
+    - id: "validate-codex-method"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: |
+        case "{{codex_install_method}}" in
+          source-build|dotslash-release) ;;
+          *)
+            echo "Unsupported codex_install_method: {{codex_install_method}}"
+            echo "Supported methods: source-build, dotslash-release"
+            exit 1
+            ;;
+        esac
+    - id: "validate-codex-method-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        $supported = @("source-build", "dotslash-release")
+        if ($supported -notcontains "{{codex_install_method}}") {
+          Write-Error "Unsupported codex_install_method: {{codex_install_method}}"
+          Write-Error "Supported methods: source-build, dotslash-release"
+          exit 1
+        }
+    - id: "validate-codex-windows-wsl"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        $distros = wsl.exe -l -q
+        if (-not $distros) {
+          Write-Error "Codex on Windows requires WSL2 with a Linux distribution."
+          exit 1
+        }
+  healthcheck:
+    - id: "codex-health-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: |
+        set -euo pipefail
+        case "{{codex_install_method}}" in
+          source-build)
+            if [ -x "{{codex_binary_link}}" ]; then
+              "{{codex_binary_link}}" --version
+            else
+              "{{codex_source_dir}}/codex-rs/target/debug/codex" --version
+            fi
+            ;;
+          dotslash-release)
+            "{{codex_dotslash_target}}" --version
+            ;;
+        esac
+    - id: "codex-health-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        if ("{{codex_install_method}}" -eq "source-build") {
+          wsl.exe bash -lc "\"{{codex_wsl_binary_link}}\" --version || \"{{codex_wsl_source_dir}}/codex-rs/target/debug/codex\" --version"
+        } else {
+          wsl.exe bash -lc "\"{{codex_wsl_dotslash_target}}\" --version"
+        }
+artifacts:
+  - id: "codex-install-unix"
+    type: "command"
+    when:
+      platforms: [macos, ubuntu]
+    commands:
+      - id: "codex-install-unix-dispatch"
+        shell: bash
+        run: |
+          set -euo pipefail
+          method="{{codex_install_method}}"
+          source_dir="{{codex_source_dir}}"
+          git_ref="{{codex_git_ref}}"
+          release_tag="{{codex_release_tag}}"
+          install_just="{{codex_install_just}}"
+          install_nextest="{{codex_install_nextest}}"
+
+          ensure_rustup() {
+            if ! command -v rustup >/dev/null 2>&1; then
+              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            fi
+            export PATH="$HOME/.cargo/bin:$PATH"
+          }
+
+          case "$method" in
+            source-build)
+              if ! command -v git >/dev/null 2>&1; then
+                echo "git is required for Codex source build."
+                exit 1
+              fi
+              if [ ! -d "$source_dir/.git" ]; then
+                git clone https://github.com/openai/codex.git "$source_dir"
+              fi
+              cd "$source_dir"
+              git fetch --all --tags
+              if [ -n "$git_ref" ]; then
+                git checkout "$git_ref"
+                git pull --ff-only || true
+              fi
+              ensure_rustup
+              rustup component add rustfmt
+              rustup component add clippy
+              if [ "$install_just" = "true" ]; then
+                cargo install just
+              fi
+              if [ "$install_nextest" = "true" ]; then
+                cargo install --locked cargo-nextest
+              fi
+              cd "$source_dir/codex-rs"
+              cargo build
+              mkdir -p "$(dirname "{{codex_binary_link}}")"
+              cp "target/debug/codex" "{{codex_binary_link}}"
+              chmod +x "{{codex_binary_link}}"
+              ;;
+            dotslash-release)
+              if [ "$release_tag" = "latest" ]; then
+                download_url="https://github.com/openai/codex/releases/latest/download/codex"
+              else
+                download_url="https://github.com/openai/codex/releases/download/${release_tag}/codex"
+              fi
+              mkdir -p "$(dirname "{{codex_dotslash_target}}")"
+              curl -fsSL "$download_url" -o "{{codex_dotslash_target}}"
+              chmod +x "{{codex_dotslash_target}}"
+              ;;
+            *)
+              echo "Unsupported method: $method"
+              exit 1
+              ;;
+          esac
+  - id: "codex-install-windows"
+    type: "command"
+    when:
+      platforms: [windows]
+    commands:
+      - id: "codex-install-win-dispatch"
+        shell: powershell
+        run: |
+          $method = "{{codex_install_method}}"
+          switch ($method) {
+            "source-build" {
+              $script = @(
+                'set -euo pipefail'
+                'source_dir="{{codex_wsl_source_dir}}"'
+                'git_ref="{{codex_git_ref}}"'
+                'install_just="{{codex_install_just}}"'
+                'install_nextest="{{codex_install_nextest}}"'
+                'if ! command -v git >/dev/null 2>&1; then echo "git is required for Codex source build."; exit 1; fi'
+                'if [ ! -d "$source_dir/.git" ]; then git clone https://github.com/openai/codex.git "$source_dir"; fi'
+                'cd "$source_dir"'
+                'git fetch --all --tags'
+                'if [ -n "$git_ref" ]; then git checkout "$git_ref"; git pull --ff-only || true; fi'
+                'if ! command -v rustup >/dev/null 2>&1; then curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y; fi'
+                'export PATH="$HOME/.cargo/bin:$PATH"'
+                'rustup component add rustfmt'
+                'rustup component add clippy'
+                'if [ "$install_just" = "true" ]; then cargo install just; fi'
+                'if [ "$install_nextest" = "true" ]; then cargo install --locked cargo-nextest; fi'
+                'cd "$source_dir/codex-rs"'
+                'cargo build'
+                'mkdir -p "$(dirname "{{codex_wsl_binary_link}}")"'
+                'cp "target/debug/codex" "{{codex_wsl_binary_link}}"'
+                'chmod +x "{{codex_wsl_binary_link}}"'
+              ) -join '; '
+              wsl.exe bash -lc $script
+            }
+            "dotslash-release" {
+              $script = @(
+                'set -euo pipefail'
+                'release_tag="{{codex_release_tag}}"'
+                'if [ "$release_tag" = "latest" ]; then download_url="https://github.com/openai/codex/releases/latest/download/codex"; else download_url="https://github.com/openai/codex/releases/download/${release_tag}/codex"; fi'
+                'mkdir -p "$(dirname "{{codex_wsl_dotslash_target}}")"'
+                'curl -fsSL "$download_url" -o "{{codex_wsl_dotslash_target}}"'
+                'chmod +x "{{codex_wsl_dotslash_target}}"'
+              ) -join '; '
+              wsl.exe bash -lc $script
+            }
+            default {
+              throw "Unsupported method: $method"
+            }
+          }

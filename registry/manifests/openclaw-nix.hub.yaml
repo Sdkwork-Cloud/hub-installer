@@ -1,0 +1,41 @@
+schemaVersion: "1.0"
+$schema: "../../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "OpenClaw Install (Nix)"
+  version: "2026.03.08"
+  description: "Install OpenClaw with nix-openclaw flake workflows."
+  homepage: "https://docs.openclaw.ai/install/nix"
+platforms:
+  - macos
+  - ubuntu
+variables:
+  openclaw_nix_flake: "github:openclaw/nix-openclaw"
+defaults:
+  sudo: true
+  timeoutMs: 1200000
+lifecycle:
+  preflight:
+    - id: "show-openclaw-nix-profile"
+      shell: bash
+      run: "echo OpenClaw profile=nix flake={{openclaw_nix_flake}}"
+  healthcheck:
+    - id: "openclaw-nix-health"
+      shell: bash
+      run: |
+        set -euo pipefail
+        command -v nix >/dev/null 2>&1
+        nix --version
+artifacts:
+  - id: "openclaw-nix-install-unix"
+    type: "command"
+    commands:
+      - id: "setup-openclaw-nix-unix"
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v nix >/dev/null 2>&1; then
+            echo "nix command is required for nix profile."
+            exit 1
+          fi
+          nix run "{{openclaw_nix_flake}}" -- --help || true
+          echo "Use nix-openclaw templates for complete declarative setup."

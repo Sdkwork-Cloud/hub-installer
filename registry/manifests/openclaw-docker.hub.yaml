@@ -1,0 +1,173 @@
+schemaVersion: "1.0"
+$schema: "../../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "OpenClaw Install (Docker)"
+  version: "2026.03.08"
+  description: "Install OpenClaw with docker-setup.sh for containerized deployment."
+  homepage: "https://docs.openclaw.ai/install/docker"
+platforms:
+  - windows
+  - macos
+  - ubuntu
+variables:
+  hub_software_name: "openclaw"
+  hub_install_control_level: "opaque"
+  hub_container_runtime_preference: "auto"
+  openclaw_source_dir: "{{hub_work_root}}"
+  openclaw_docker_image: "openclaw:local"
+  openclaw_docker_extra_mounts: ""
+  openclaw_docker_home_volume: ""
+  openclaw_docker_apt_packages: ""
+  openclaw_remove_docker_image: "false"
+defaults:
+  sudo: false
+  timeoutMs: 1800000
+  env:
+    OPENCLAW_CONFIG_DIR: "{{hub_data_root}}/config"
+    OPENCLAW_WORKSPACE_DIR: "{{hub_data_root}}/workspace"
+    OPENCLAW_EXTRA_MOUNTS: "{{openclaw_docker_extra_mounts}}"
+    OPENCLAW_HOME_VOLUME: "{{openclaw_docker_home_volume}}"
+    OPENCLAW_DOCKER_APT_PACKAGES: "{{openclaw_docker_apt_packages}}"
+installation:
+  method:
+    id: "docker"
+    label: "Docker workflow"
+    type: "container"
+    summary: "Build and run OpenClaw through the documented Docker setup path."
+    supported: true
+    documentationUrl: "https://docs.openclaw.ai/install/docker"
+  alternatives:
+    - id: "installer-script"
+      label: "Official installer script"
+      type: "script"
+      summary: "Use the upstream installer script for a non-containerized setup."
+      supported: false
+    - id: "source-build"
+      label: "Source build"
+      type: "source"
+      summary: "Clone the repository, build it locally, and link the CLI globally."
+      supported: false
+  directories:
+    installRoot:
+      path: "{{hub_install_root}}"
+      customizable: true
+      purpose: "Hub Installer tracking root and auxiliary files for the container workflow."
+    workRoot:
+      path: "{{hub_work_root}}"
+      customizable: true
+      purpose: "Local checkout and Docker compose asset directory."
+    dataRoot:
+      path: "{{hub_data_root}}"
+      customizable: true
+      purpose: "Managed backup/import root for containerized OpenClaw data."
+    additional:
+      - id: "openclaw-home"
+        path: "~/.openclaw"
+        customizable: false
+        purpose: "Optional local OpenClaw home directory or mounted volume source."
+dataLayout:
+  items:
+    - id: "openclaw-home"
+      title: "OpenClaw home directory or mounted volume"
+      kind: "directory"
+      path: "~/.openclaw"
+      description: "Stores config, workspace content, credentials, and optional secrets when the Docker profile maps a host home directory or volume."
+      includes:
+        - "openclaw.json"
+        - "workspace"
+        - "credentials"
+        - "agents"
+        - "secrets.json"
+      sensitive: true
+      backupByDefault: true
+      uninstallByDefault: "preserve"
+migration:
+  strategies:
+    - id: "carry-forward-openclaw-home"
+      source: "openclaw"
+      title: "Carry forward mounted OpenClaw state"
+      mode: "manual"
+      summary: "Re-use the existing OpenClaw home directory or Docker volume when recreating the containerized environment."
+      supported: true
+      dataItemIds:
+        - "openclaw-home"
+      warnings:
+        - "Verify that volume mounts and credential references are valid on the destination host before starting the gateway."
+dependencies:
+  - id: "git"
+    description: "Git is required to fetch the OpenClaw Docker source tree."
+    check:
+      type: "command"
+      name: "git"
+  - id: "docker"
+    description: "Docker is required to build and run the OpenClaw container stack."
+    check:
+      type: "command"
+      name: "docker"
+lifecycle:
+  preflight:
+    - id: "show-openclaw-docker-profile"
+      shell: bash
+      run: "echo OpenClaw profile=docker source_dir={{openclaw_source_dir}} image={{openclaw_docker_image}} runtime={{hub_effective_runtime_platform}} container_runtime={{hub_container_runtime}} wsl={{hub_wsl_distribution}}"
+  healthcheck:
+    - id: "openclaw-docker-health"
+      shell: bash
+      run: |
+        set -euo pipefail
+        command -v docker >/dev/null 2>&1
+        docker --version
+        if [ -d "{{openclaw_source_dir}}" ]; then
+          cd "{{openclaw_source_dir}}"
+          docker compose ps || true
+        fi
+  uninstall:
+    - id: "openclaw-docker-uninstall"
+      shell: bash
+      run: |
+        set -euo pipefail
+        if ! command -v docker >/dev/null 2>&1; then
+          echo "docker is not available; skipping compose shutdown"
+          exit 0
+        fi
+        if [ -d "{{openclaw_source_dir}}" ]; then
+          cd "{{openclaw_source_dir}}"
+          docker compose down --remove-orphans || true
+        fi
+        if [ "{{openclaw_remove_docker_image}}" = "true" ] && [ -n "{{openclaw_docker_image}}" ]; then
+          docker image rm "{{openclaw_docker_image}}" || true
+        fi
+artifacts:
+  - id: "openclaw-docker-install-unix"
+    type: "command"
+    commands:
+      - id: "setup-openclaw-docker-unix"
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v git >/dev/null 2>&1; then
+            echo "git is required for docker install."
+            exit 1
+          fi
+          if [ ! -d "{{openclaw_source_dir}}/.git" ]; then
+            git clone https://github.com/openclaw/openclaw.git "{{openclaw_source_dir}}"
+          fi
+          cd "{{openclaw_source_dir}}"
+          export OPENCLAW_EXTRA_MOUNTS="{{openclaw_docker_extra_mounts}}"
+          export OPENCLAW_HOME_VOLUME="{{openclaw_docker_home_volume}}"
+          export OPENCLAW_DOCKER_APT_PACKAGES="{{openclaw_docker_apt_packages}}"
+          setup_script="./docker-setup.hub-installer.sh"
+          trap 'rm -f "$setup_script"' EXIT
+          sed \
+            -e 's|echo "==> Onboarding (interactive)"|echo "==> Onboarding (non-interactive)"|' \
+            -e 's|docker compose "${COMPOSE_ARGS\[@\]}" run --rm openclaw-cli onboard --mode local --no-install-daemon|docker compose "${COMPOSE_ARGS[@]}" run --rm openclaw-cli onboard --mode local --no-install-daemon --non-interactive --accept-risk --flow manual --auth-choice skip --skip-channels --skip-skills --skip-search --skip-health --skip-ui|' \
+            ./docker-setup.sh > "$setup_script"
+          chmod +x "$setup_script"
+          if ! grep -Fq -- '--non-interactive --accept-risk' "$setup_script"; then
+            echo "failed to prepare non-interactive openclaw docker setup"
+            exit 1
+          fi
+          if [ -n "{{openclaw_docker_image}}" ]; then
+            OPENCLAW_IMAGE="{{openclaw_docker_image}}" bash "$setup_script"
+          else
+            bash "$setup_script"
+          fi

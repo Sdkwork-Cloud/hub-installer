@@ -1,0 +1,609 @@
+schemaVersion: "1.0"
+$schema: "../../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "OpenClaw Install (Multi-Method)"
+  version: "2026.03.08"
+  description: "Install OpenClaw with installer scripts, npm/pnpm, source, bun, docker, podman, ansible, or nix."
+  homepage: "https://docs.openclaw.ai/install"
+platforms:
+  - windows
+  - macos
+  - ubuntu
+variables:
+  hub_software_name: "openclaw"
+  hub_install_control_level: "partial"
+  openclaw_install_method: "installer-script"
+  openclaw_channel: "latest"
+  openclaw_onboard: "true"
+  openclaw_source_dir: "{{hub_work_root}}"
+  openclaw_git_update: "true"
+  openclaw_install_prefix: "{{hub_install_root}}"
+  openclaw_install_cli_node_version: "22.22.0"
+  openclaw_install_cli_json: "false"
+  openclaw_install_cli_set_npm_prefix: "false"
+  openclaw_docker_image: "openclaw:local"
+  openclaw_docker_extra_mounts: ""
+  openclaw_docker_home_volume: ""
+  openclaw_docker_apt_packages: ""
+  openclaw_ansible_dir: "{{hub_work_root}}/ansible"
+  openclaw_nix_flake: "github:openclaw/nix-openclaw"
+  openclaw_installer_no_prompt: "false"
+  openclaw_installer_dry_run: "false"
+  openclaw_installer_verbose: "false"
+defaults:
+  sudo: true
+  timeoutMs: 1800000
+  env:
+    SHARP_IGNORE_GLOBAL_LIBVIPS: "1"
+lifecycle:
+  preflight:
+    - id: "show-selected-method-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: "echo OpenClaw install method={{openclaw_install_method}} channel={{openclaw_channel}} onboard={{openclaw_onboard}}"
+    - id: "show-selected-method-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        Write-Host "OpenClaw install method={{openclaw_install_method}} channel={{openclaw_channel}} onboard={{openclaw_onboard}}"
+        Write-Host "[*] hub-installer: WSL2 is strongly recommended for OpenClaw on Windows. Re-run with --effective-runtime-platform wsl for the closest official setup path."
+    - id: "validate-method-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: |
+        case "{{openclaw_install_method}}" in
+          installer-script|installer-script-git|installer-cli-script|npm|pnpm|source|bun|docker|podman|ansible|nix) ;;
+          *)
+            echo "Unsupported openclaw_install_method on Unix: {{openclaw_install_method}}"
+            echo "Supported methods: installer-script, installer-script-git, installer-cli-script, npm, pnpm, source, bun, docker, podman, ansible, nix"
+            exit 1
+            ;;
+        esac
+    - id: "validate-method-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        $supported = @("installer-script", "installer-script-git", "npm", "pnpm", "source")
+        if ($supported -notcontains "{{openclaw_install_method}}") {
+          Write-Error "Unsupported openclaw_install_method on Windows: {{openclaw_install_method}}"
+          Write-Error "Supported methods on Windows: installer-script, installer-script-git, npm, pnpm, source"
+          exit 1
+        }
+  healthcheck:
+    - id: "openclaw-health-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: |
+        set -euo pipefail
+        method="{{openclaw_install_method}}"
+        case "$method" in
+          installer-script|installer-script-git|installer-cli-script|npm|pnpm|source)
+            command -v openclaw >/dev/null 2>&1
+            openclaw --version
+            openclaw doctor --non-interactive || true
+            ;;
+          bun)
+            command -v bun >/dev/null 2>&1
+            bun --version
+            ;;
+          docker)
+            command -v docker >/dev/null 2>&1
+            if [ -d "{{openclaw_source_dir}}" ]; then
+              cd "{{openclaw_source_dir}}"
+              docker compose ps || true
+            fi
+            ;;
+          podman)
+            command -v podman >/dev/null 2>&1
+            podman ps || true
+            ;;
+          ansible)
+            test -d "{{openclaw_ansible_dir}}"
+            ;;
+          nix)
+            command -v nix >/dev/null 2>&1
+            ;;
+        esac
+    - id: "openclaw-health-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        $method = "{{openclaw_install_method}}"
+        switch ($method) {
+          "installer-script" { openclaw --version }
+          "installer-script-git" { openclaw --version }
+          "npm" { openclaw --version }
+          "pnpm" { openclaw --version }
+          "source" { openclaw --version }
+          default { Write-Host "No Windows healthcheck for method $method" }
+        }
+artifacts:
+  - id: "openclaw-install-unix"
+    type: "command"
+    when:
+      platforms: [macos, ubuntu]
+    commands:
+      - id: "openclaw-install-unix-dispatch"
+        shell: bash
+        run: |
+          set -euo pipefail
+          method="{{openclaw_install_method}}"
+          channel="{{openclaw_channel}}"
+          onboard="{{openclaw_onboard}}"
+          source_dir="{{openclaw_source_dir}}"
+          should_update_git="{{openclaw_git_update}}"
+          installer_no_prompt="{{openclaw_installer_no_prompt}}"
+          installer_dry_run="{{openclaw_installer_dry_run}}"
+          installer_verbose="{{openclaw_installer_verbose}}"
+          cli_json="{{openclaw_install_cli_json}}"
+          cli_set_npm_prefix="{{openclaw_install_cli_set_npm_prefix}}"
+
+          run_onboard() {
+            if [ "$onboard" = "true" ]; then
+              openclaw onboard --install-daemon
+            fi
+          }
+
+          ensure_openclaw_repo() {
+            if ! command -v git >/dev/null 2>&1; then
+              echo "git is required for method '$method'."
+              exit 1
+            fi
+            if [ ! -d "$source_dir/.git" ]; then
+              git clone https://github.com/openclaw/openclaw.git "$source_dir"
+            fi
+            cd "$source_dir"
+          }
+
+          case "$method" in
+            installer-script)
+              installer_flags=""
+              if [ "$installer_no_prompt" = "true" ]; then
+                installer_flags="$installer_flags --no-prompt"
+              fi
+              if [ "$installer_dry_run" = "true" ]; then
+                installer_flags="$installer_flags --dry-run"
+              fi
+              if [ "$installer_verbose" = "true" ]; then
+                installer_flags="$installer_flags --verbose"
+              fi
+              if [ "$onboard" = "true" ]; then
+                curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install.sh | bash -s -- --version "$channel" $installer_flags
+              else
+                curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install.sh | bash -s -- --version "$channel" --no-onboard $installer_flags
+              fi
+              ;;
+            installer-script-git)
+              installer_flags=""
+              if [ "$installer_no_prompt" = "true" ]; then
+                installer_flags="$installer_flags --no-prompt"
+              fi
+              if [ "$installer_dry_run" = "true" ]; then
+                installer_flags="$installer_flags --dry-run"
+              fi
+              if [ "$installer_verbose" = "true" ]; then
+                installer_flags="$installer_flags --verbose"
+              fi
+              if [ "$onboard" = "true" ]; then
+                curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install.sh | bash -s -- --install-method git --version "$channel" --git-dir "$source_dir" $installer_flags
+              else
+                curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install.sh | bash -s -- --install-method git --version "$channel" --git-dir "$source_dir" --no-onboard $installer_flags
+              fi
+              ;;
+            installer-cli-script)
+              cli_flags=""
+              if [ "$cli_json" = "true" ]; then
+                cli_flags="$cli_flags --json"
+              fi
+              if [ "$cli_set_npm_prefix" = "true" ]; then
+                cli_flags="$cli_flags --set-npm-prefix"
+              fi
+              if [ "$onboard" = "true" ]; then
+                curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install-cli.sh | bash -s -- --prefix "{{openclaw_install_prefix}}" --version "$channel" --node-version "{{openclaw_install_cli_node_version}}" --onboard $cli_flags
+              else
+                curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install-cli.sh | bash -s -- --prefix "{{openclaw_install_prefix}}" --version "$channel" --node-version "{{openclaw_install_cli_node_version}}" --no-onboard $cli_flags
+              fi
+              ;;
+            npm)
+              npm install -g "openclaw@$channel"
+              run_onboard
+              ;;
+            pnpm)
+              pnpm add -g "openclaw@$channel"
+              pnpm approve-builds -g || true
+              run_onboard
+              ;;
+            source)
+              if ! command -v pnpm >/dev/null 2>&1; then
+                corepack enable
+                corepack prepare pnpm@latest --activate
+              fi
+              ensure_openclaw_repo
+              if [ "$should_update_git" = "true" ]; then
+                git pull --rebase || git pull --ff-only
+              fi
+              pnpm install
+              pnpm ui:build
+              pnpm build
+              pnpm link --global
+              run_onboard
+              ;;
+            bun)
+              if ! command -v bun >/dev/null 2>&1; then
+                curl -fsSL https://bun.sh/install | bash
+                export PATH="$HOME/.bun/bin:$PATH"
+              fi
+              ensure_openclaw_repo
+              bun install
+              bun run build
+              echo "Bun mode is experimental for OpenClaw gateway runtime."
+              ;;
+            docker)
+              ensure_openclaw_repo
+              export OPENCLAW_EXTRA_MOUNTS="{{openclaw_docker_extra_mounts}}"
+              export OPENCLAW_HOME_VOLUME="{{openclaw_docker_home_volume}}"
+              export OPENCLAW_DOCKER_APT_PACKAGES="{{openclaw_docker_apt_packages}}"
+              if [ -n "{{openclaw_docker_image}}" ]; then
+                OPENCLAW_IMAGE="{{openclaw_docker_image}}" ./docker-setup.sh
+              else
+                ./docker-setup.sh
+              fi
+              ;;
+            podman)
+              ensure_openclaw_repo
+              ./setup-podman.sh
+              ;;
+            ansible)
+              if [ ! -d "{{openclaw_ansible_dir}}/.git" ]; then
+                git clone https://github.com/openclaw/openclaw-ansible.git "{{openclaw_ansible_dir}}"
+              fi
+              cd "{{openclaw_ansible_dir}}"
+              if [ -x ./install.sh ]; then
+                ./install.sh
+              else
+                curl -fsSL https://raw.githubusercontent.com/openclaw/openclaw-ansible/main/install.sh | bash
+              fi
+              ;;
+            nix)
+              if ! command -v nix >/dev/null 2>&1; then
+                echo "nix command is required for nix install method."
+                exit 1
+              fi
+              nix run "{{openclaw_nix_flake}}" -- --help || true
+              echo "Use nix-openclaw templates for complete declarative setup."
+              ;;
+            *)
+              echo "Unsupported method: $method"
+              exit 1
+              ;;
+          esac
+  - id: "openclaw-install-windows"
+    type: "command"
+    when:
+      platforms: [windows]
+    commands:
+      - id: "openclaw-install-win-dispatch"
+        shell: powershell
+        run: |
+          $method = "{{openclaw_install_method}}"
+          $channel = "{{openclaw_channel}}"
+          $onboard = "{{openclaw_onboard}}"
+          $sourceDir = "{{openclaw_source_dir}}"
+          $installerDryRun = "{{openclaw_installer_dry_run}}"
+          $installer = [scriptblock]::Create((iwr -useb https://openclaw.ai/install.ps1))
+
+          function Get-NodeMajorVersion {
+            param(
+              [string]$NodeExecutable = "node"
+            )
+            try {
+              $nodeVersion = (& $NodeExecutable --version 2>$null).Trim()
+              if ($nodeVersion -match "^v(\\d+)") {
+                return [int]$Matches[1]
+              }
+            } catch {
+              # ignore
+            }
+            return 0
+          }
+
+          function Refresh-PathFromSystem {
+            $machinePath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
+            $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+            $env:Path = "$machinePath;$userPath"
+          }
+
+          function Get-NodeExecutableCandidates {
+            $candidates = @(
+              "$env:ProgramFiles\\nodejs\\node.exe",
+              "$env:LOCALAPPDATA\\Programs\\nodejs\\node.exe",
+              "$env:ChocolateyInstall\\bin\\node.exe",
+              "$env:USERPROFILE\\scoop\\apps\\nodejs-lts\\current\\node.exe",
+              "$env:USERPROFILE\\scoop\\shims\\node.exe"
+            )
+
+            try {
+              $whereCandidates = & where.exe node.exe 2>$null
+              if ($whereCandidates) {
+                $candidates += $whereCandidates
+              }
+            } catch {
+              # ignore
+            }
+
+            $deduped = New-Object "System.Collections.Generic.HashSet[string]" ([System.StringComparer]::OrdinalIgnoreCase)
+            $ordered = @()
+            foreach ($candidate in $candidates) {
+              if ([string]::IsNullOrWhiteSpace($candidate)) {
+                continue
+              }
+              $expanded = [Environment]::ExpandEnvironmentVariables($candidate.Trim())
+              if ((Test-Path $expanded) -and $deduped.Add($expanded)) {
+                $ordered += $expanded
+              }
+            }
+            return $ordered
+          }
+
+          function UseNodeExecutablePath {
+            param(
+              [string]$NodeExecutablePath
+            )
+            if (-not $NodeExecutablePath) {
+              return
+            }
+            $candidateDir = Split-Path $NodeExecutablePath -Parent
+            $pathEntries = $env:Path -split ";"
+            if (-not ($pathEntries | Where-Object { $_ -ieq $candidateDir })) {
+              $env:Path = "$candidateDir;$env:Path"
+            }
+          }
+
+          function Get-NodeVersionInfo {
+            param(
+              [string]$NodeExecutable = "node"
+            )
+            try {
+              $nodeVersion = (& $NodeExecutable --version 2>$null).Trim()
+              if ($nodeVersion -match "^v(?<major>\d+)(?:\.(?<minor>\d+))?(?:\.(?<patch>\d+))?") {
+                return @{
+                  Major = [int]$Matches["major"]
+                  Minor = if ($Matches["minor"]) { [int]$Matches["minor"] } else { 0 }
+                  Patch = if ($Matches["patch"]) { [int]$Matches["patch"] } else { 0 }
+                }
+              }
+            } catch {
+              # ignore
+            }
+            return $null
+          }
+
+          function Test-SupportedOpenClawNodeVersion {
+            param(
+              [hashtable]$VersionInfo
+            )
+            if (-not $VersionInfo) {
+              return $false
+            }
+            if ($VersionInfo.Major -ge 24) {
+              return $true
+            }
+            if ($VersionInfo.Major -eq 22 -and $VersionInfo.Minor -ge 16) {
+              return $true
+            }
+            return $false
+          }
+
+          function Get-NodeVersionRank {
+            param(
+              [hashtable]$VersionInfo
+            )
+            if (-not $VersionInfo) {
+              return -1
+            }
+            return ($VersionInfo.Major * 1000000) + ($VersionInfo.Minor * 1000) + $VersionInfo.Patch
+          }
+
+          function TryActivateSupportedNode {
+            $bestNodePath = $null
+            $bestNodeRank = -1
+            foreach ($candidate in Get-NodeExecutableCandidates) {
+              $candidateVersion = Get-NodeVersionInfo -NodeExecutable $candidate
+              if (-not (Test-SupportedOpenClawNodeVersion -VersionInfo $candidateVersion)) {
+                continue
+              }
+              $candidateRank = Get-NodeVersionRank -VersionInfo $candidateVersion
+              if ($candidateRank -gt $bestNodeRank) {
+                $bestNodeRank = $candidateRank
+                $bestNodePath = $candidate
+              }
+            }
+
+            if ($bestNodePath) {
+              UseNodeExecutablePath -NodeExecutablePath $bestNodePath
+              return $true
+            }
+
+            return $false
+          }
+
+          function Try-InstallNodeViaWinget {
+            if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+              return $false
+            }
+
+            Write-Host "[*] hub-installer: bootstrapping Node.js via winget (OpenJS.NodeJS.LTS)..."
+            try {
+              winget install --id OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements
+            } catch {
+              Write-Host "[!] winget install failed; trying winget upgrade."
+            }
+            try {
+              winget upgrade --id OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements
+            } catch {
+              Write-Host "[!] winget upgrade failed."
+            }
+
+            Refresh-PathFromSystem
+            return $true
+          }
+
+          function Try-InstallNodeViaChoco {
+            if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
+              return $false
+            }
+
+            Write-Host "[*] hub-installer: bootstrapping Node.js via Chocolatey (nodejs-lts)..."
+            try {
+              choco install nodejs-lts -y
+            } catch {
+              Write-Host "[!] choco install failed; trying choco upgrade."
+            }
+            try {
+              choco upgrade nodejs-lts -y
+            } catch {
+              Write-Host "[!] choco upgrade failed."
+            }
+
+            Refresh-PathFromSystem
+            return $true
+          }
+
+          function Try-InstallNodeViaScoop {
+            if (-not (Get-Command scoop -ErrorAction SilentlyContinue)) {
+              return $false
+            }
+
+            Write-Host "[*] hub-installer: bootstrapping Node.js via Scoop (nodejs-lts)..."
+            try {
+              scoop install nodejs-lts
+            } catch {
+              Write-Host "[!] scoop install failed; trying scoop update."
+            }
+            try {
+              scoop update nodejs-lts
+            } catch {
+              Write-Host "[!] scoop update failed."
+            }
+
+            Refresh-PathFromSystem
+            return $true
+          }
+
+          function Ensure-SupportedNodeForOpenClawInstaller {
+            $currentNodeVersion = Get-NodeVersionInfo
+            if (Test-SupportedOpenClawNodeVersion -VersionInfo $currentNodeVersion) {
+              return
+            }
+            if (TryActivateSupportedNode) {
+              return
+            }
+
+            Write-Host "[*] hub-installer: Node.js 24 LTS is recommended for OpenClaw on Windows. Node.js 22.16+ remains supported. Attempting bootstrap..."
+
+            $attemptedBootstrap = $false
+            foreach ($bootstrapper in @("winget", "choco", "scoop")) {
+              $ran = $false
+              switch ($bootstrapper) {
+                "winget" { $ran = Try-InstallNodeViaWinget }
+                "choco" { $ran = Try-InstallNodeViaChoco }
+                "scoop" { $ran = Try-InstallNodeViaScoop }
+              }
+              if ($ran) {
+                $attemptedBootstrap = $true
+              }
+              if (TryActivateSupportedNode) {
+                return
+              }
+            }
+
+            if ($attemptedBootstrap) {
+              throw "Node.js bootstrap completed, but no supported Node.js runtime was found in this session. Open a new terminal and run hub-installer openclaw again, re-run with --effective-runtime-platform wsl, or run: hub-installer nodejs fnm"
+            }
+
+            throw "Node.js 24 LTS is recommended for OpenClaw on Windows, and Node.js 22.16+ remains supported. WSL2 is strongly recommended; retry with --effective-runtime-platform wsl or install Node.js manually."
+          }
+
+          function Run-Onboard {
+            if ($onboard -eq "true") {
+              openclaw onboard --install-daemon
+            }
+          }
+
+          switch ($method) {
+            "installer-script" {
+              Ensure-SupportedNodeForOpenClawInstaller
+              $installerArgs = @{
+                Tag = $channel
+              }
+              if ($onboard -ne "true") {
+                $installerArgs.NoOnboard = $true
+              }
+              if ($installerDryRun -eq "true") {
+                $installerArgs.DryRun = $true
+              }
+              & $installer @installerArgs
+            }
+            "installer-script-git" {
+              Ensure-SupportedNodeForOpenClawInstaller
+              $installerGitArgs = @{
+                InstallMethod = "git"
+                Tag = $channel
+                GitDir = $sourceDir
+              }
+              if ($onboard -ne "true") {
+                $installerGitArgs.NoOnboard = $true
+              }
+              if ($installerDryRun -eq "true") {
+                $installerGitArgs.DryRun = $true
+              }
+              & $installer @installerGitArgs
+            }
+            "npm" {
+              npm install -g "openclaw@$channel"
+              Run-Onboard
+            }
+            "pnpm" {
+              pnpm add -g "openclaw@$channel"
+              try {
+                pnpm approve-builds -g
+              } catch {
+                Write-Host "pnpm approve-builds returned non-zero; continuing."
+              }
+              Run-Onboard
+            }
+            "source" {
+              if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+                throw "git is required for source install."
+              }
+              if (-not (Test-Path "$sourceDir\\.git")) {
+                git clone https://github.com/openclaw/openclaw.git $sourceDir
+              }
+              Set-Location $sourceDir
+              if ("{{openclaw_git_update}}" -eq "true") {
+                try {
+                  git pull --rebase
+                } catch {
+                  git pull --ff-only
+                }
+              }
+              if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
+                corepack enable
+                corepack prepare pnpm@latest --activate
+              }
+              pnpm install
+              pnpm ui:build
+              pnpm build
+              pnpm link --global
+              Run-Onboard
+            }
+            default {
+              throw "Unsupported method: $method"
+            }
+          }

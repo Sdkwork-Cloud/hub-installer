@@ -1,0 +1,56 @@
+schemaVersion: "1.0"
+$schema: "../../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "IronClaw Install (pnpm)"
+  version: "2026.03.19"
+  description: "Legacy IronClaw pnpm placeholder retained for compatibility; registry defaults now route to the official Rust-native source profile."
+  homepage: "https://github.com/nearai/ironclaw"
+platforms:
+  - windows
+  - macos
+  - ubuntu
+variables:
+  hub_software_name: "ironclaw"
+  hub_install_control_level: "partial"
+  ironclaw_channel: "latest"
+  ironclaw_onboard: "true"
+defaults:
+  sudo: true
+  timeoutMs: 1200000
+lifecycle:
+  preflight:
+    - id: "show-ironclaw-pnpm-profile-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: "echo IronClaw profile=pnpm channel={{ironclaw_channel}} onboard={{ironclaw_onboard}}"
+    - id: "show-ironclaw-pnpm-profile-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: "Write-Host \"IronClaw profile=pnpm channel={{ironclaw_channel}} onboard={{ironclaw_onboard}}\""
+  healthcheck:
+    - id: "ironclaw-version"
+      run: "ironclaw --version"
+artifacts:
+  - id: "ironclaw-install-pnpm"
+    type: "command"
+    commands:
+      - id: "install-ironclaw-pnpm"
+        run: "pnpm add -g ironclaw@{{ironclaw_channel}}"
+      - id: "ironclaw-onboard-unix"
+        shell: bash
+        when:
+          platforms: [macos, ubuntu]
+        run: |
+          if [ "{{ironclaw_onboard}}" = "true" ]; then
+            ironclaw onboard --install-daemon
+          fi
+      - id: "ironclaw-onboard-win"
+        shell: powershell
+        when:
+          platforms: [windows]
+        run: |
+          if ("{{ironclaw_onboard}}" -eq "true") {
+            ironclaw onboard --install-daemon
+          }

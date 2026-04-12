@@ -1,0 +1,269 @@
+schemaVersion: "1.0"
+$schema: "../../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "OpenClaw Install (Source Build)"
+  version: "2026.03.08"
+  description: "Build OpenClaw from source repository and link globally."
+  homepage: "https://docs.openclaw.ai/install"
+platforms:
+  - windows
+  - macos
+  - ubuntu
+variables:
+  hub_software_name: "openclaw"
+  hub_install_control_level: "managed"
+  openclaw_source_dir: "{{hub_work_root}}"
+  openclaw_git_update: "true"
+  openclaw_onboard: "true"
+defaults:
+  sudo: true
+  timeoutMs: 2400000
+  env:
+    SHARP_IGNORE_GLOBAL_LIBVIPS: "1"
+installation:
+  method:
+    id: "source-build"
+    label: "Source build"
+    type: "source"
+    summary: "Clone the OpenClaw repository, build it locally, and link the CLI globally."
+    supported: true
+    documentationUrl: "https://docs.openclaw.ai/install"
+  alternatives:
+    - id: "installer-script"
+      label: "Official installer script"
+      type: "script"
+      summary: "Use the upstream installer script for the simplest guided setup."
+      supported: false
+    - id: "npm-global"
+      label: "npm global install"
+      type: "package"
+      summary: "Install the published CLI package globally through npm."
+      supported: false
+    - id: "pnpm-global"
+      label: "pnpm global install"
+      type: "package"
+      summary: "Install the published CLI package globally through pnpm."
+      supported: false
+  directories:
+    installRoot:
+      path: "{{hub_install_root}}"
+      customizable: true
+      purpose: "Managed installation root used for the globally linked CLI."
+    workRoot:
+      path: "{{hub_work_root}}"
+      customizable: true
+      purpose: "Repository checkout directory."
+    binDir:
+      path: "{{hub_bin_dir}}"
+      customizable: true
+      purpose: "Directory where the globally linked OpenClaw command is exposed."
+    additional:
+      - id: "openclaw-home"
+        path: "~/.openclaw"
+        customizable: false
+        purpose: "OpenClaw config, workspace, credentials, and optional secrets."
+dataLayout:
+  items:
+    - id: "openclaw-home"
+      title: "OpenClaw home directory"
+      kind: "directory"
+      path: "~/.openclaw"
+      description: "Stores config, workspace content, credentials, agent auth profiles, and optional secrets payloads."
+      includes:
+        - "openclaw.json"
+        - "workspace"
+        - "credentials"
+        - "agents"
+        - "secrets.json"
+      sensitive: true
+      backupByDefault: true
+      uninstallByDefault: "preserve"
+migration:
+  strategies:
+    - id: "carry-forward-openclaw-home"
+      source: "openclaw"
+      title: "Carry forward OpenClaw state"
+      mode: "manual"
+      summary: "Re-use the OpenClaw home directory when switching between source builds or hosts."
+      supported: true
+      dataItemIds:
+        - "openclaw-home"
+      warnings:
+        - "Run `openclaw config validate` and `openclaw health` after restoring workspace or credentials."
+dependencies:
+  - id: "git"
+    description: "Git is required to clone and update the OpenClaw source tree."
+    check:
+      type: "command"
+      name: "git"
+    install:
+      - id: "install-git-unix"
+        shell: bash
+        when:
+          platforms: [macos, ubuntu]
+        run: |
+          if command -v brew >/dev/null 2>&1; then
+            brew install git
+          elif command -v apt-get >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y git
+          else
+            echo "Git must be installed manually on this platform." >&2
+            exit 1
+          fi
+      - id: "install-git-win"
+        shell: powershell
+        when:
+          platforms: [windows]
+        run: "winget install --id Git.Git -e --source winget"
+  - id: "node"
+    description: "Node.js is required to build OpenClaw from source."
+    check:
+      type: "command"
+      name: "node"
+    install:
+      - id: "install-node-unix"
+        shell: bash
+        when:
+          platforms: [macos, ubuntu]
+        run: |
+          if command -v brew >/dev/null 2>&1; then
+            brew install node
+          elif command -v apt-get >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y nodejs npm
+          else
+            echo "Node.js must be installed manually on this platform." >&2
+            exit 1
+          fi
+      - id: "install-node-win"
+        shell: powershell
+        when:
+          platforms: [windows]
+        run: "winget install --id OpenJS.NodeJS.LTS -e --source winget"
+  - id: "pnpm"
+    description: "pnpm is required to install and link the OpenClaw workspace."
+    check:
+      type: "command"
+      name: "pnpm"
+    install:
+      - id: "install-pnpm-unix"
+        shell: bash
+        when:
+          platforms: [macos, ubuntu]
+        run: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
+      - id: "install-pnpm-win"
+        shell: powershell
+        when:
+          platforms: [windows]
+        run: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
+lifecycle:
+  preflight:
+    - id: "show-openclaw-source-profile-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: "echo OpenClaw profile=source source_dir={{openclaw_source_dir}} onboard={{openclaw_onboard}}"
+    - id: "show-openclaw-source-profile-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: "Write-Host \"OpenClaw profile=source source_dir={{openclaw_source_dir}} onboard={{openclaw_onboard}}\""
+  healthcheck:
+    - id: "openclaw-source-version"
+      run: "openclaw --version"
+    - id: "openclaw-source-doctor"
+      run: "openclaw doctor --non-interactive"
+      continueOnError: true
+  uninstall:
+    - id: "openclaw-source-unlink-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: |
+        if command -v pnpm >/dev/null 2>&1 && [ -d "{{openclaw_source_dir}}" ]; then
+          cd "{{openclaw_source_dir}}"
+          pnpm unlink --global || true
+        fi
+    - id: "openclaw-source-unlink-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        if ((Get-Command pnpm -ErrorAction SilentlyContinue) -and (Test-Path "{{openclaw_source_dir}}")) {
+          Set-Location "{{openclaw_source_dir}}"
+          try {
+            pnpm unlink --global
+          } catch {
+            Write-Host "OpenClaw source link was already removed."
+          }
+        }
+artifacts:
+  - id: "openclaw-source-build-unix"
+    type: "command"
+    when:
+      platforms: [macos, ubuntu]
+    commands:
+      - id: "build-openclaw-from-source-unix"
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v git >/dev/null 2>&1; then
+            echo "git is required for source install."
+            exit 1
+          fi
+          if ! command -v pnpm >/dev/null 2>&1; then
+            corepack enable
+            corepack prepare pnpm@latest --activate
+          fi
+          if [ ! -d "{{openclaw_source_dir}}/.git" ]; then
+            git clone https://github.com/openclaw/openclaw.git "{{openclaw_source_dir}}"
+          fi
+          cd "{{openclaw_source_dir}}"
+          if [ "{{openclaw_git_update}}" = "true" ]; then
+            git pull --rebase || git pull --ff-only
+          fi
+          pnpm install
+          pnpm ui:build
+          pnpm build
+          pnpm link --global
+          if [ "{{openclaw_onboard}}" = "true" ]; then
+            openclaw onboard --install-daemon
+          fi
+  - id: "openclaw-source-build-win"
+    type: "command"
+    when:
+      platforms: [windows]
+    commands:
+      - id: "build-openclaw-from-source-win"
+        shell: powershell
+        run: |
+          if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+            throw "git is required for source install."
+          }
+          if (-not (Test-Path "{{openclaw_source_dir}}\\.git")) {
+            git clone https://github.com/openclaw/openclaw.git "{{openclaw_source_dir}}"
+          }
+          Set-Location "{{openclaw_source_dir}}"
+          if ("{{openclaw_git_update}}" -eq "true") {
+            try {
+              git pull --rebase
+            } catch {
+              git pull --ff-only
+            }
+          }
+          if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
+            corepack enable
+            corepack prepare pnpm@latest --activate
+          }
+          pnpm install
+          pnpm ui:build
+          pnpm build
+          pnpm link --global
+          if ("{{openclaw_onboard}}" -eq "true") {
+            openclaw onboard --install-daemon
+          }

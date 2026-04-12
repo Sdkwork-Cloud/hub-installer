@@ -1,0 +1,41 @@
+schemaVersion: "1.0"
+$schema: "../../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "GitHub Project Install"
+  version: "1.0.0"
+  description: "Clone or pull a GitHub repository and run optional build steps."
+platforms:
+  - windows
+  - macos
+  - ubuntu
+variables:
+  repo_url: "https://github.com/octocat/Hello-World.git"
+  destination: "{{home}}/workspace/github-project"
+defaults:
+  sudo: false
+  timeoutMs: 900000
+dependencies:
+  - id: "git"
+    check:
+      type: "command"
+      name: "git"
+artifacts:
+  - id: "github-source"
+    type: "git"
+    repository: "{{repo_url}}"
+    destination: "{{destination}}"
+    strategy: "clone-or-pull"
+    build:
+      - run: "pnpm install --frozen-lockfile"
+        cwd: "{{destination}}"
+        when:
+          fileExists: "{{destination}}/pnpm-lock.yaml"
+      - run: "pnpm build"
+        cwd: "{{destination}}"
+        continueOnError: true
+        when:
+          fileExists: "{{destination}}/package.json"
+lifecycle:
+  healthcheck:
+    - run: "git -C {{destination}} rev-parse --is-inside-work-tree"
+

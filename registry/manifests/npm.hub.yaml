@@ -1,0 +1,132 @@
+schemaVersion: "1.0"
+$schema: "../../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "npm Install"
+  version: "2026.03.20"
+  description: "Install or refresh npm through the local Node.js runtime."
+  homepage: "https://www.npmjs.com/"
+platforms:
+  - windows
+  - macos
+  - ubuntu
+variables:
+  npm_channel: "latest"
+defaults:
+  sudo: true
+  timeoutMs: 1200000
+installation:
+  method:
+    id: "npm-global"
+    label: "npm refresh"
+    type: "package"
+    summary: "Install or refresh npm through the Node.js runtime on the selected host."
+    supported: true
+    documentationUrl: "https://docs.npmjs.com/downloading-and-installing-node-js-and-npm"
+    notes:
+      - "npm is distributed with Node.js and is refreshed in place during installation."
+  alternatives:
+    - id: "node-runtime"
+      label: "Node.js runtime install"
+      type: "package"
+      summary: "Install Node.js first and use the bundled npm distribution."
+      supported: true
+  directories:
+    installRoot:
+      path: "{{hub_install_root}}"
+      customizable: false
+      purpose: "Hub Installer tracking root; npm continues to live under the active Node.js runtime."
+dependencies:
+  - id: "nodejs"
+    description: "Node.js is required before npm can be refreshed."
+    check:
+      type: "command"
+      name: "node"
+    install:
+      - id: "install-nodejs-unix"
+        shell: bash
+        when:
+          platforms: [macos, ubuntu]
+        run: |
+          if [ "{{platform}}" = "macos" ]; then
+            brew install node
+          else
+            sudo apt-get update
+            sudo apt-get install -y curl ca-certificates nodejs npm
+          fi
+      - id: "install-nodejs-win"
+        shell: powershell
+        when:
+          platforms: [windows]
+        run: |
+          if (Get-Command winget -ErrorAction SilentlyContinue) {
+            winget install --id OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements
+          } elseif (Get-Command choco -ErrorAction SilentlyContinue) {
+            choco install nodejs-lts -y
+          } else {
+            throw "Node.js is missing and neither winget nor choco is available."
+          }
+lifecycle:
+  preflight:
+    - id: "show-npm-channel-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: "echo npm channel={{npm_channel}}"
+    - id: "show-npm-channel-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: "Write-Host \"npm channel={{npm_channel}}\""
+  healthcheck:
+    - id: "npm-healthcheck-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: |
+        set -euo pipefail
+        node --version
+        npm --version
+    - id: "npm-healthcheck-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        node --version
+        npm --version
+  uninstall:
+    - id: "npm-uninstall-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: |
+        echo "npm is bundled with Node.js and is not removed automatically."
+    - id: "npm-uninstall-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        Write-Host "npm is bundled with Node.js and is not removed automatically."
+artifacts:
+  - id: "npm-refresh"
+    type: "command"
+    commands:
+      - id: "refresh-npm-unix"
+        shell: bash
+        when:
+          platforms: [macos, ubuntu]
+        run: |
+          set -euo pipefail
+          if ! command -v npm >/dev/null 2>&1; then
+            echo "npm is unavailable. Install dependencies first." >&2
+            exit 1
+          fi
+          npm install -g "npm@{{npm_channel}}"
+      - id: "refresh-npm-win"
+        shell: powershell
+        when:
+          platforms: [windows]
+        run: |
+          if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+            throw "npm is unavailable. Install dependencies first."
+          }
+          npm install -g "npm@{{npm_channel}}"

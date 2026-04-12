@@ -1,0 +1,522 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hub-installer.dev/schemas/hub-installer.manifest.schema.json",
+  "title": "hub-installer manifest schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "metadata", "artifacts"],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "homepage": { "type": "string" },
+        "maintainers": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "platforms": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/platform" }
+    },
+    "variables": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sudo": { "type": "boolean" },
+        "timeoutMs": { "type": "number", "exclusiveMinimum": 0 },
+        "cwd": { "type": "string", "minLength": 1 },
+        "continueOnError": { "type": "boolean" },
+        "env": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "dependencies": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dependency" }
+    },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "preflight": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/command" }
+        },
+        "preInstall": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/command" }
+        },
+        "install": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/command" }
+        },
+        "postInstall": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/command" }
+        },
+        "configure": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/command" }
+        },
+        "healthcheck": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/command" }
+        },
+        "backup": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/command" }
+        },
+        "uninstall": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/command" }
+        }
+      }
+    },
+    "installation": {
+      "$ref": "#/$defs/installationDescriptor"
+    },
+    "dataLayout": {
+      "$ref": "#/$defs/dataLayoutDescriptor"
+    },
+    "migration": {
+      "$ref": "#/$defs/migrationDescriptor"
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/artifact" }
+    }
+  },
+  "$defs": {
+    "platform": {
+      "type": "string",
+      "enum": ["windows", "macos", "ubuntu", "android", "ios"]
+    },
+    "condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "platforms": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/platform" }
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "commandExists": { "type": "string", "minLength": 1 },
+        "fileExists": { "type": "string", "minLength": 1 }
+      }
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "run": { "type": "string", "minLength": 1 },
+        "shell": {
+          "type": "string",
+          "enum": ["auto", "bash", "powershell", "cmd"]
+        },
+        "cwd": { "type": "string", "minLength": 1 },
+        "env": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "timeoutMs": { "type": "number", "exclusiveMinimum": 0 },
+        "continueOnError": { "type": "boolean" },
+        "elevated": { "type": "boolean" },
+        "when": { "$ref": "#/$defs/condition" }
+      }
+    },
+    "dependencyCheck": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "name"],
+          "properties": {
+            "type": { "const": "command" },
+            "name": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "path"],
+          "properties": {
+            "type": { "const": "file" },
+            "path": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "name"],
+          "properties": {
+            "type": { "const": "env" },
+            "name": { "type": "string", "minLength": 1 },
+            "equals": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "platforms"],
+          "properties": {
+            "type": { "const": "platform" },
+            "platforms": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/platform" }
+            }
+          }
+        }
+      ]
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "check"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "required": { "type": "boolean" },
+        "check": { "$ref": "#/$defs/dependencyCheck" },
+        "install": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/command" }
+        }
+      }
+    },
+    "installationMethod": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "type", "summary"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "type": {
+          "type": "string",
+          "enum": ["script", "package", "source", "container", "binary", "wsl", "manual"]
+        },
+        "summary": { "type": "string", "minLength": 1 },
+        "supported": { "type": "boolean" },
+        "documentationUrl": { "type": "string", "minLength": 1 },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "installationDirectory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "customizable": { "type": "boolean" },
+        "purpose": { "type": "string", "minLength": 1 }
+      }
+    },
+    "installationDirectories": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "installRoot": { "$ref": "#/$defs/installationDirectory" },
+        "workRoot": { "$ref": "#/$defs/installationDirectory" },
+        "binDir": { "$ref": "#/$defs/installationDirectory" },
+        "dataRoot": { "$ref": "#/$defs/installationDirectory" },
+        "additional": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/installationDirectory" }
+        }
+      }
+    },
+    "installationDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method"],
+      "properties": {
+        "method": { "$ref": "#/$defs/installationMethod" },
+        "alternatives": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/installationMethod" }
+        },
+        "directories": { "$ref": "#/$defs/installationDirectories" }
+      }
+    },
+    "dataItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "kind"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "kind": {
+          "type": "string",
+          "enum": ["file", "directory", "database", "secret", "log"]
+        },
+        "path": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "includes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "sensitive": { "type": "boolean" },
+        "backupByDefault": { "type": "boolean" },
+        "uninstallByDefault": {
+          "type": "string",
+          "enum": ["preserve", "remove", "manual"]
+        }
+      }
+    },
+    "dataLayoutDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items"],
+      "properties": {
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/dataItem" }
+        }
+      }
+    },
+    "migrationStrategy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "source", "title", "mode", "summary"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "mode": {
+          "type": "string",
+          "enum": ["command", "manual", "script"]
+        },
+        "summary": { "type": "string", "minLength": 1 },
+        "supported": { "type": "boolean" },
+        "documentationUrl": { "type": "string", "minLength": 1 },
+        "previewCommands": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/command" }
+        },
+        "applyCommands": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/command" }
+        },
+        "dataItemIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "migrationDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategies"],
+      "properties": {
+        "strategies": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/migrationStrategy" }
+        }
+      }
+    },
+    "artifactBase": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "when": { "$ref": "#/$defs/condition" },
+        "preInstall": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/command" }
+        },
+        "postInstall": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/command" }
+        },
+        "configure": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/command" }
+        }
+      }
+    },
+    "packageInstallRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source"],
+      "properties": {
+        "source": { "type": "string", "minLength": 1 },
+        "sourceChecksum": { "type": "string", "minLength": 1 },
+        "platform": { "$ref": "#/$defs/platform" },
+        "format": { "type": "string" },
+        "installerArgs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "managerArgs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "archiveEntry": { "type": "string" },
+        "archiveCommand": { "type": "string" },
+        "dryRun": { "type": "boolean" },
+        "verbose": { "type": "boolean" },
+        "sudo": { "type": "boolean" },
+        "cwd": { "type": "string" },
+        "timeoutMs": { "type": "number", "exclusiveMinimum": 0 },
+        "androidDeviceId": { "type": "string" },
+        "iosDeviceId": { "type": "string" },
+        "iosSimulator": { "type": "boolean" }
+      }
+    },
+    "packageInstallByPlatform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["byPlatform"],
+      "properties": {
+        "byPlatform": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "windows": { "$ref": "#/$defs/packageInstallRequest" },
+            "macos": { "$ref": "#/$defs/packageInstallRequest" },
+            "ubuntu": { "$ref": "#/$defs/packageInstallRequest" },
+            "android": { "$ref": "#/$defs/packageInstallRequest" },
+            "ios": { "$ref": "#/$defs/packageInstallRequest" }
+          }
+        },
+        "fallback": { "$ref": "#/$defs/packageInstallRequest" }
+      }
+    },
+    "packageArtifact": {
+      "allOf": [
+        { "$ref": "#/$defs/artifactBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "install"],
+          "properties": {
+            "type": { "const": "package" },
+            "install": {
+              "oneOf": [
+                { "$ref": "#/$defs/packageInstallRequest" },
+                { "$ref": "#/$defs/packageInstallByPlatform" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "gitArtifact": {
+      "allOf": [
+        { "$ref": "#/$defs/artifactBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "repository", "destination"],
+          "properties": {
+            "type": { "const": "git" },
+            "repository": { "type": "string", "minLength": 1 },
+            "destination": { "type": "string", "minLength": 1 },
+            "ref": { "type": "string" },
+            "cloneDepth": { "type": "number", "exclusiveMinimum": 0 },
+            "strategy": {
+              "type": "string",
+              "enum": ["clone-or-pull", "clone-only", "pull-only"]
+            },
+            "submodules": { "type": "boolean" },
+            "lfs": { "type": "boolean" },
+            "build": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/command" }
+            }
+          }
+        }
+      ]
+    },
+    "huggingfaceArtifact": {
+      "allOf": [
+        { "$ref": "#/$defs/artifactBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "repoId", "destination"],
+          "properties": {
+            "type": { "const": "huggingface" },
+            "repoId": { "type": "string", "minLength": 1 },
+            "destination": { "type": "string", "minLength": 1 },
+            "revision": { "type": "string" },
+            "method": { "type": "string", "enum": ["git-lfs", "huggingface-cli"] },
+            "tokenEnv": { "type": "string" },
+            "include": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "exclude": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      ]
+    },
+    "commandArtifact": {
+      "allOf": [
+        { "$ref": "#/$defs/artifactBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "commands"],
+          "properties": {
+            "type": { "const": "command" },
+            "commands": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/command" }
+            }
+          }
+        }
+      ]
+    },
+    "artifact": {
+      "oneOf": [
+        { "$ref": "#/$defs/packageArtifact" },
+        { "$ref": "#/$defs/gitArtifact" },
+        { "$ref": "#/$defs/huggingfaceArtifact" },
+        { "$ref": "#/$defs/commandArtifact" }
+      ]
+    }
+  }
+}

@@ -1,0 +1,87 @@
+schemaVersion: "1.0"
+$schema: "../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "OpenClaw Bootstrap (npm Profile)"
+  version: "2026.03.08"
+  description: "Install OpenClaw via npm global package and optionally run onboarding."
+  homepage: "https://docs.openclaw.ai/install"
+platforms:
+  - windows
+  - macos
+  - ubuntu
+variables:
+  openclaw_channel: "latest"
+  openclaw_onboard: "true"
+defaults:
+  sudo: true
+  timeoutMs: 1200000
+  env:
+    SHARP_IGNORE_GLOBAL_LIBVIPS: "1"
+dependencies:
+  - id: "node-runtime"
+    description: "OpenClaw requires Node.js 22+."
+    check:
+      type: "command"
+      name: "node"
+    install:
+      - description: "Install Node.js LTS via winget (Windows)"
+        shell: powershell
+        when:
+          platforms: [windows]
+        run: "winget install --id OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements"
+      - description: "Install Node.js via Homebrew (macOS)"
+        shell: bash
+        when:
+          platforms: [macos]
+        run: "brew install node"
+      - description: "Install Node.js via apt (Ubuntu)"
+        shell: bash
+        when:
+          platforms: [ubuntu]
+        elevated: true
+        run: "apt-get update && apt-get install -y nodejs npm"
+lifecycle:
+  preflight:
+    - id: "show-profile-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: "echo OpenClaw npm profile: channel={{openclaw_channel}} onboard={{openclaw_onboard}}"
+    - id: "show-profile-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: "Write-Host \"OpenClaw npm profile: channel={{openclaw_channel}} onboard={{openclaw_onboard}}\""
+  install:
+    - id: "install-openclaw-npm"
+      run: "npm install -g openclaw@{{openclaw_channel}}"
+    - id: "openclaw-onboard-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: |
+        if [ "{{openclaw_onboard}}" = "true" ]; then
+          openclaw onboard --install-daemon
+        fi
+    - id: "openclaw-onboard-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        if ("{{openclaw_onboard}}" -eq "true") {
+          openclaw onboard --install-daemon
+        }
+  healthcheck:
+    - id: "openclaw-version"
+      run: "openclaw --version"
+    - id: "openclaw-doctor"
+      run: "openclaw doctor --non-interactive"
+      continueOnError: true
+artifacts:
+  - id: "openclaw-status"
+    type: "command"
+    commands:
+      - run: "openclaw status"
+        continueOnError: true
+      - run: "openclaw dashboard"
+        continueOnError: true

@@ -1,0 +1,118 @@
+schemaVersion: "1.0"
+$schema: "../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "AI Workbench Bootstrap"
+  version: "2026.03.01"
+  description: "Cross-platform install workflow for toolchain, codebase, model, and post setup."
+platforms:
+  - windows
+  - macos
+  - ubuntu
+variables:
+  app_dir: "{{home}}/hub-workbench/app"
+  model_dir: "{{home}}/hub-workbench/models/whisper-large-v3"
+defaults:
+  sudo: true
+  timeoutMs: 900000
+  cwd: "{{home}}/hub-workbench"
+  env:
+    HUB_ENV: "production"
+dependencies:
+  - id: "git"
+    description: "Git must exist"
+    check:
+      type: "command"
+      name: "git"
+  - id: "node"
+    description: "Node.js runtime"
+    check:
+      type: "command"
+      name: "node"
+    install:
+      - run: "winget install --id OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements"
+        shell: powershell
+        when:
+          platforms: [windows]
+      - run: "brew install node"
+        shell: bash
+        when:
+          platforms: [macos]
+      - run: "apt-get install -y nodejs npm"
+        shell: bash
+        elevated: true
+        when:
+          platforms: [ubuntu]
+lifecycle:
+  preflight:
+    - id: "show-platform"
+      run: "echo Running on {{platform}}"
+    - id: "print-versions"
+      run: "node --version && git --version"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+    - id: "print-versions-win"
+      run: "node --version; git --version"
+      shell: powershell
+      when:
+        platforms: [windows]
+  preInstall:
+    - run: "mkdir -p {{home}}/hub-workbench"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+    - run: "New-Item -ItemType Directory -Path {{home}}/hub-workbench -Force | Out-Null"
+      shell: powershell
+      when:
+        platforms: [windows]
+  postInstall:
+    - run: "echo All artifacts installed."
+  healthcheck:
+    - run: "git --version"
+    - run: "node --version"
+artifacts:
+  - id: "package-manager-bootstrap"
+    type: "package"
+    title: "Install FFmpeg"
+    install:
+      byPlatform:
+        windows:
+          source: "winget://Gyan.FFmpeg"
+        macos:
+          source: "brew://ffmpeg"
+        ubuntu:
+          source: "apt://ffmpeg"
+  - id: "application-code"
+    type: "git"
+    repository: "https://github.com/example/example-app.git"
+    destination: "{{app_dir}}"
+    strategy: "clone-or-pull"
+    ref: "main"
+    submodules: true
+    build:
+      - run: "pnpm install --frozen-lockfile"
+        cwd: "{{app_dir}}"
+      - run: "pnpm build"
+        cwd: "{{app_dir}}"
+  - id: "whisper-model"
+    type: "huggingface"
+    repoId: "openai/whisper-large-v3"
+    destination: "{{model_dir}}"
+    method: "huggingface-cli"
+    revision: "main"
+    include:
+      - "*.json"
+      - "*.safetensors"
+    postInstall:
+      - run: "echo Model downloaded to {{model_dir}}"
+  - id: "runtime-config"
+    type: "command"
+    commands:
+      - run: "echo HUB_MODEL_DIR={{model_dir}} > {{home}}/hub-workbench/.env"
+        shell: bash
+        when:
+          platforms: [macos, ubuntu]
+      - run: "Set-Content -Path {{home}}/hub-workbench/.env -Value \"HUB_MODEL_DIR={{model_dir}}\""
+        shell: powershell
+        when:
+          platforms: [windows]

@@ -1,0 +1,269 @@
+schemaVersion: "1.0"
+$schema: "../../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "OpenClaw Install (WSL)"
+  version: "2026.03.23"
+  description: "Install OpenClaw inside WSL from a Windows host with systemd-backed gateway readiness."
+  homepage: "https://docs.openclaw.ai/install"
+platforms:
+  - windows
+variables:
+  hub_software_name: "openclaw"
+  hub_install_control_level: "partial"
+  openclaw_channel: "latest"
+  openclaw_onboard: "true"
+  openclaw_wsl_enable_systemd: "true"
+defaults:
+  sudo: false
+  timeoutMs: 1800000
+installation:
+  method:
+    id: "wsl"
+    label: "Windows WSL install"
+    type: "wsl"
+    summary: "Install OpenClaw inside a WSL distribution while managing the flow from Windows."
+    supported: true
+    documentationUrl: "https://docs.openclaw.ai/install"
+    notes:
+      - "This profile is intended for Windows hosts and executes the runtime inside WSL."
+      - "WSL2 with systemd is required for the OpenClaw gateway service install path."
+      - "If needed, Hub Installer updates /etc/wsl.conf and restarts WSL once before continuing."
+  alternatives:
+    - id: "installer-script"
+      label: "Official installer script"
+      type: "script"
+      summary: "Run the upstream installer directly on macOS or Linux."
+      supported: false
+    - id: "pnpm-global"
+      label: "pnpm global install"
+      type: "package"
+      summary: "Install the published OpenClaw package globally without WSL."
+      supported: false
+  directories:
+    installRoot:
+      path: "{{hub_install_root}}"
+      customizable: true
+      purpose: "Managed WSL installation root."
+    dataRoot:
+      path: "{{hub_data_root}}"
+      customizable: true
+      purpose: "Managed WSL backup/import root."
+    additional:
+      - id: "openclaw-home"
+        path: "~/.openclaw"
+        customizable: false
+        purpose: "OpenClaw config, workspace, credentials, and optional secrets inside WSL."
+dataLayout:
+  items:
+    - id: "openclaw-home"
+      title: "OpenClaw home directory"
+      kind: "directory"
+      path: "~/.openclaw"
+      description: "Stores config, workspace content, credentials, agent auth profiles, and optional secrets payloads inside the selected WSL distribution."
+      includes:
+        - "openclaw.json"
+        - "workspace"
+        - "credentials"
+        - "agents"
+        - "secrets.json"
+      sensitive: true
+      backupByDefault: true
+      uninstallByDefault: "preserve"
+migration:
+  strategies:
+    - id: "carry-forward-openclaw-home"
+      source: "openclaw"
+      title: "Carry forward OpenClaw state into WSL"
+      mode: "manual"
+      summary: "Copy the OpenClaw home directory into the target WSL distribution before first launch."
+      supported: true
+      dataItemIds:
+        - "openclaw-home"
+      warnings:
+        - "Credential providers and channel integrations must be valid inside the selected WSL distribution."
+dependencies:
+  - id: "node"
+    description: "Node.js is required inside WSL before OpenClaw can be installed."
+    check:
+      type: "command"
+      name: "node"
+    install:
+      - id: "install-node-wsl"
+        shell: bash
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get update
+          sudo apt-get install -y curl ca-certificates
+          curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+  - id: "pnpm"
+    description: "pnpm is required inside WSL before OpenClaw can be installed."
+    check:
+      type: "command"
+      name: "pnpm"
+    install:
+      - id: "install-pnpm-wsl"
+        shell: bash
+        run: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
+lifecycle:
+  preflight:
+    - id: "openclaw-wsl-preflight"
+      shell: powershell
+      run: |
+        if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
+          throw "WSL is not available on this Windows host."
+        }
+        wsl.exe --status
+  healthcheck:
+    - id: "openclaw-wsl-health"
+      shell: powershell
+      run: |
+        $wslArgs = @()
+        if (-not [string]::IsNullOrWhiteSpace("{{hub_wsl_distribution}}")) {
+          $wslArgs += "--distribution"
+          $wslArgs += "{{hub_wsl_distribution}}"
+        }
+        $wslArgs += "--"
+        $wslArgs += "bash"
+        $wslArgs += "-lc"
+        $script = @'
+        set -euo pipefail
+        command -v openclaw >/dev/null 2>&1
+        openclaw --version
+        openclaw gateway status --require-rpc --json
+        openclaw doctor --non-interactive || true
+        '@
+        & wsl.exe @wslArgs $script
+  uninstall:
+    - id: "openclaw-wsl-uninstall"
+      shell: powershell
+      run: |
+        $wslArgs = @()
+        if (-not [string]::IsNullOrWhiteSpace("{{hub_wsl_distribution}}")) {
+          $wslArgs += "--distribution"
+          $wslArgs += "{{hub_wsl_distribution}}"
+        }
+        $wslArgs += "--"
+        $wslArgs += "bash"
+        $wslArgs += "-lc"
+        $script = @'
+        set -euo pipefail
+        if command -v pnpm >/dev/null 2>&1; then
+          pnpm remove -g openclaw || pnpm uninstall -g openclaw || true
+        elif command -v npm >/dev/null 2>&1; then
+          npm uninstall -g openclaw || true
+        fi
+        '@
+        & wsl.exe @wslArgs $script
+artifacts:
+  - id: "openclaw-install-wsl"
+    type: "command"
+    commands:
+      - id: "install-openclaw-wsl"
+        shell: powershell
+        run: |
+          $wslArgs = @()
+          if (-not [string]::IsNullOrWhiteSpace("{{hub_wsl_distribution}}")) {
+            $wslArgs += "--distribution"
+            $wslArgs += "{{hub_wsl_distribution}}"
+          }
+          $wslArgs += "--"
+          $wslArgs += "bash"
+          $wslArgs += "-lc"
+          $ensureSystemdScript = @'
+          set -euo pipefail
+          if [ "{{openclaw_wsl_enable_systemd}}" != "true" ]; then
+            exit 0
+          fi
+          if [ -f /etc/wsl.conf ] && grep -Eq '^[[:space:]]*systemd[[:space:]]*=[[:space:]]*true[[:space:]]*$' /etc/wsl.conf; then
+            exit 0
+          fi
+          if ! command -v sudo >/dev/null 2>&1; then
+            echo "sudo is required to enable systemd inside WSL." >&2
+            exit 1
+          fi
+          input_file="/dev/null"
+          if [ -f /etc/wsl.conf ]; then
+            input_file="/etc/wsl.conf"
+          fi
+          tmp_file="$(mktemp)"
+          awk '
+          BEGIN { boot_seen=0; in_boot=0; systemd_written=0 }
+          {
+            if ($0 ~ /^\[boot\][[:space:]]*$/) {
+              boot_seen=1
+              in_boot=1
+              print $0
+              next
+            }
+            if (in_boot && $0 ~ /^\[/) {
+              if (!systemd_written) {
+                print "systemd=true"
+                systemd_written=1
+              }
+              in_boot=0
+            }
+            if (in_boot && $0 ~ /^[[:space:]]*systemd[[:space:]]*=/) {
+              if (!systemd_written) {
+                print "systemd=true"
+                systemd_written=1
+              }
+              next
+            }
+            print $0
+          }
+          END {
+            if (!boot_seen) {
+              if (NR > 0) {
+                print ""
+              }
+              print "[boot]"
+              print "systemd=true"
+            } else if (in_boot && !systemd_written) {
+              print "systemd=true"
+            }
+          }
+          ' "$input_file" > "$tmp_file"
+          sudo cp "$tmp_file" /etc/wsl.conf
+          rm -f "$tmp_file"
+          printf "__SDKWORK_WSL_SYSTEMD_RESTART__\n"
+          exit 88
+          '@
+          $ensureOutput = & wsl.exe @wslArgs $ensureSystemdScript 2>&1
+          if ($LASTEXITCODE -eq 88) {
+            if (-not (($ensureOutput -join "`n") -match "__SDKWORK_WSL_SYSTEMD_RESTART__")) {
+              throw ($ensureOutput -join "`n")
+            }
+            wsl.exe --shutdown
+            Start-Sleep -Seconds 2
+          } elseif ($LASTEXITCODE -ne 0) {
+            throw ($ensureOutput -join "`n")
+          }
+          $script = @'
+          set -euo pipefail
+          if ! command -v node >/dev/null 2>&1; then
+            if ! command -v apt-get >/dev/null 2>&1; then
+              echo "Node.js is required inside WSL." >&2
+              exit 1
+            fi
+            export DEBIAN_FRONTEND=noninteractive
+            sudo apt-get update
+            sudo apt-get install -y curl ca-certificates
+            curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+            sudo apt-get install -y nodejs
+          fi
+          if ! command -v pnpm >/dev/null 2>&1; then
+            corepack enable
+            corepack prepare pnpm@latest --activate
+          fi
+          pnpm add -g openclaw@{{openclaw_channel}}
+          if [ "{{openclaw_onboard}}" = "true" ]; then
+            openclaw onboard --non-interactive --install-daemon --flow manual --auth-choice skip --skip-channels --skip-skills --skip-search --skip-ui --accept-risk
+          else
+            openclaw gateway install --json
+          fi
+          openclaw gateway status --require-rpc --json
+          '@
+          & wsl.exe @wslArgs $script

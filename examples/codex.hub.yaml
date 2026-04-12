@@ -1,0 +1,206 @@
+schemaVersion: "1.0"
+$schema: "../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "Codex CLI Bootstrap"
+  version: "2026.03.08"
+  description: "Install Codex from source or DotSlash release bootstrap."
+  homepage: "https://github.com/openai/codex"
+platforms:
+  - windows
+  - macos
+  - ubuntu
+variables:
+  hub_software_name: "codex"
+  hub_install_control_level: "managed"
+  codex_install_method: "source-build"
+  codex_source_dir: "{{hub_work_root}}"
+  codex_git_ref: "main"
+  codex_release_tag: "latest"
+  codex_install_just: "true"
+  codex_install_nextest: "false"
+  codex_binary_link: "{{hub_bin_dir}}/codex"
+  codex_dotslash_target: "{{hub_bin_dir}}/codex"
+  codex_wsl_source_dir: "{{hub_work_root}}"
+  codex_wsl_binary_link: "{{hub_bin_dir}}/codex"
+  codex_wsl_dotslash_target: "{{hub_bin_dir}}/codex"
+defaults:
+  sudo: true
+  timeoutMs: 3600000
+lifecycle:
+  preflight:
+    - id: "echo-codex-method-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: "echo codex_install_method={{codex_install_method}} codex_git_ref={{codex_git_ref}} codex_release_tag={{codex_release_tag}}"
+    - id: "echo-codex-method-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: "Write-Host \"codex_install_method={{codex_install_method}} codex_git_ref={{codex_git_ref}} codex_release_tag={{codex_release_tag}}\""
+    - id: "validate-method-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: |
+        case "{{codex_install_method}}" in
+          source-build|dotslash-release) ;;
+          *)
+            echo "Unsupported codex_install_method: {{codex_install_method}}"
+            echo "Supported: source-build, dotslash-release"
+            exit 1
+            ;;
+        esac
+    - id: "validate-method-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        $supported = @("source-build", "dotslash-release")
+        if ($supported -notcontains "{{codex_install_method}}") {
+          Write-Error "Unsupported codex_install_method: {{codex_install_method}}"
+          exit 1
+        }
+    - id: "require-wsl-on-windows"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        $distros = wsl.exe -l -q
+        if (-not $distros) {
+          Write-Error "Codex requires WSL2 on Windows. Install WSL2 first."
+          exit 1
+        }
+  healthcheck:
+    - id: "codex-version-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: |
+        case "{{codex_install_method}}" in
+          source-build)
+            if [ -x "{{codex_binary_link}}" ]; then
+              "{{codex_binary_link}}" --version
+            else
+              "{{codex_source_dir}}/codex-rs/target/debug/codex" --version
+            fi
+            ;;
+          dotslash-release)
+            "{{codex_dotslash_target}}" --version
+            ;;
+        esac
+    - id: "codex-version-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        if ("{{codex_install_method}}" -eq "source-build") {
+          wsl.exe bash -lc "\"{{codex_wsl_binary_link}}\" --version || \"{{codex_wsl_source_dir}}/codex-rs/target/debug/codex\" --version"
+        } else {
+          wsl.exe bash -lc "\"{{codex_wsl_dotslash_target}}\" --version"
+        }
+artifacts:
+  - id: "codex-install-unix"
+    type: "command"
+    when:
+      platforms: [macos, ubuntu]
+    commands:
+      - id: "codex-install-unix-dispatch"
+        shell: bash
+        run: |
+          set -euo pipefail
+          method="{{codex_install_method}}"
+          source_dir="{{codex_source_dir}}"
+          git_ref="{{codex_git_ref}}"
+          release_tag="{{codex_release_tag}}"
+
+          case "$method" in
+            source-build)
+              if ! command -v git >/dev/null 2>&1; then
+                echo "git is required for source-build."
+                exit 1
+              fi
+              if [ ! -d "$source_dir/.git" ]; then
+                git clone https://github.com/openai/codex.git "$source_dir"
+              fi
+              cd "$source_dir"
+              git fetch --all --tags
+              if [ -n "$git_ref" ]; then
+                git checkout "$git_ref"
+                git pull --ff-only || true
+              fi
+              if ! command -v rustup >/dev/null 2>&1; then
+                curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+              fi
+              export PATH="$HOME/.cargo/bin:$PATH"
+              rustup component add rustfmt
+              rustup component add clippy
+              if [ "{{codex_install_just}}" = "true" ]; then
+                cargo install just
+              fi
+              if [ "{{codex_install_nextest}}" = "true" ]; then
+                cargo install --locked cargo-nextest
+              fi
+              cd "$source_dir/codex-rs"
+              cargo build
+              mkdir -p "$(dirname "{{codex_binary_link}}")"
+              cp target/debug/codex "{{codex_binary_link}}"
+              chmod +x "{{codex_binary_link}}"
+              ;;
+            dotslash-release)
+              if [ "$release_tag" = "latest" ]; then
+                download_url="https://github.com/openai/codex/releases/latest/download/codex"
+              else
+                download_url="https://github.com/openai/codex/releases/download/${release_tag}/codex"
+              fi
+              mkdir -p "$(dirname "{{codex_dotslash_target}}")"
+              curl -fsSL "$download_url" -o "{{codex_dotslash_target}}"
+              chmod +x "{{codex_dotslash_target}}"
+              ;;
+          esac
+  - id: "codex-install-win-wsl"
+    type: "command"
+    when:
+      platforms: [windows]
+    commands:
+      - id: "codex-install-win-dispatch"
+        shell: powershell
+        run: |
+          $method = "{{codex_install_method}}"
+          switch ($method) {
+            "source-build" {
+              $script = @(
+                'set -euo pipefail'
+                'source_dir="{{codex_wsl_source_dir}}"'
+                'git_ref="{{codex_git_ref}}"'
+                'if ! command -v git >/dev/null 2>&1; then echo "git is required for source-build."; exit 1; fi'
+                'if [ ! -d "$source_dir/.git" ]; then git clone https://github.com/openai/codex.git "$source_dir"; fi'
+                'cd "$source_dir"'
+                'git fetch --all --tags'
+                'if [ -n "$git_ref" ]; then git checkout "$git_ref"; git pull --ff-only || true; fi'
+                'if ! command -v rustup >/dev/null 2>&1; then curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y; fi'
+                'export PATH="$HOME/.cargo/bin:$PATH"'
+                'rustup component add rustfmt'
+                'rustup component add clippy'
+                'if [ "{{codex_install_just}}" = "true" ]; then cargo install just; fi'
+                'if [ "{{codex_install_nextest}}" = "true" ]; then cargo install --locked cargo-nextest; fi'
+                'cd "$source_dir/codex-rs"'
+                'cargo build'
+                'mkdir -p "$(dirname "{{codex_wsl_binary_link}}")"'
+                'cp target/debug/codex "{{codex_wsl_binary_link}}"'
+                'chmod +x "{{codex_wsl_binary_link}}"'
+              ) -join '; '
+              wsl.exe bash -lc $script
+            }
+            "dotslash-release" {
+              $script = @(
+                'set -euo pipefail'
+                'release_tag="{{codex_release_tag}}"'
+                'if [ "$release_tag" = "latest" ]; then download_url="https://github.com/openai/codex/releases/latest/download/codex"; else download_url="https://github.com/openai/codex/releases/download/${release_tag}/codex"; fi'
+                'mkdir -p "$(dirname "{{codex_wsl_dotslash_target}}")"'
+                'curl -fsSL "$download_url" -o "{{codex_wsl_dotslash_target}}"'
+                'chmod +x "{{codex_wsl_dotslash_target}}"'
+              ) -join '; '
+              wsl.exe bash -lc $script
+            }
+          }

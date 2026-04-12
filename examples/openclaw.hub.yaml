@@ -1,0 +1,95 @@
+schemaVersion: "1.0"
+$schema: "../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "OpenClaw Bootstrap (Recommended Installer Script)"
+  version: "2026.03.08"
+  description: "Install OpenClaw with the official installer script. For npm/pnpm/source/docker/podman/ansible/nix methods, use dedicated profiles."
+  homepage: "https://docs.openclaw.ai/install"
+platforms:
+  - windows
+  - macos
+  - ubuntu
+variables:
+  hub_software_name: "openclaw"
+  hub_install_control_level: "opaque"
+  openclaw_channel: "latest"
+  openclaw_onboard: "true"
+  openclaw_installer_no_prompt: "false"
+  openclaw_installer_dry_run: "false"
+  openclaw_installer_verbose: "false"
+defaults:
+  sudo: true
+  timeoutMs: 1800000
+  env:
+    SHARP_IGNORE_GLOBAL_LIBVIPS: "1"
+lifecycle:
+  preflight:
+    - id: "show-installer-script-profile-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: "echo OpenClaw profile=installer-script channel={{openclaw_channel}} onboard={{openclaw_onboard}} no_prompt={{openclaw_installer_no_prompt}} dry_run={{openclaw_installer_dry_run}} verbose={{openclaw_installer_verbose}}"
+    - id: "show-installer-script-profile-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: "Write-Host \"OpenClaw profile=installer-script channel={{openclaw_channel}} onboard={{openclaw_onboard}}\""
+  healthcheck:
+    - id: "openclaw-health-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: |
+        set -euo pipefail
+        command -v openclaw >/dev/null 2>&1
+        openclaw --version
+        openclaw doctor --non-interactive || true
+    - id: "openclaw-health-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        openclaw --version
+        openclaw doctor --non-interactive
+artifacts:
+  - id: "openclaw-installer-script-unix"
+    type: "command"
+    when:
+      platforms: [macos, ubuntu]
+    commands:
+      - id: "run-openclaw-installer-script-unix"
+        shell: bash
+        run: |
+          set -euo pipefail
+          extra_flags=""
+          if [ "{{openclaw_installer_no_prompt}}" = "true" ]; then
+            extra_flags="$extra_flags --no-prompt"
+          fi
+          if [ "{{openclaw_installer_dry_run}}" = "true" ]; then
+            extra_flags="$extra_flags --dry-run"
+          fi
+          if [ "{{openclaw_installer_verbose}}" = "true" ]; then
+            extra_flags="$extra_flags --verbose"
+          fi
+          if [ "{{openclaw_onboard}}" = "true" ]; then
+            curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install.sh | bash -s -- --version "{{openclaw_channel}}" $extra_flags
+          else
+            curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install.sh | bash -s -- --version "{{openclaw_channel}}" --no-onboard $extra_flags
+          fi
+  - id: "openclaw-installer-script-win"
+    type: "command"
+    when:
+      platforms: [windows]
+    commands:
+      - id: "run-openclaw-installer-script-win"
+        shell: powershell
+        run: |
+          $installer = [scriptblock]::Create((iwr -useb https://openclaw.ai/install.ps1))
+          $args = @("-Tag", "{{openclaw_channel}}")
+          if ("{{openclaw_onboard}}" -ne "true") {
+            $args += "-NoOnboard"
+          }
+          if ("{{openclaw_installer_dry_run}}" -eq "true") {
+            $args += "-DryRun"
+          }
+          & $installer @args

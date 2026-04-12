@@ -1,0 +1,215 @@
+schemaVersion: "1.0"
+$schema: "../../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "OpenClaw Install (pnpm)"
+  version: "2026.03.08"
+  description: "Install OpenClaw via pnpm global package."
+  homepage: "https://docs.openclaw.ai/install"
+platforms:
+  - windows
+  - macos
+  - ubuntu
+variables:
+  openclaw_channel: "latest"
+  openclaw_onboard: "true"
+defaults:
+  sudo: true
+  timeoutMs: 1200000
+  env:
+    SHARP_IGNORE_GLOBAL_LIBVIPS: "1"
+installation:
+  method:
+    id: "pnpm-global"
+    label: "pnpm global install"
+    type: "package"
+    summary: "Install the OpenClaw CLI globally through pnpm and optionally run onboarding."
+    supported: true
+    documentationUrl: "https://docs.openclaw.ai/install"
+  alternatives:
+    - id: "installer-script"
+      label: "Official installer script"
+      type: "script"
+      summary: "Use the upstream installer script for the most guided setup path."
+      supported: false
+    - id: "npm-global"
+      label: "npm global install"
+      type: "package"
+      summary: "Install the OpenClaw CLI globally through npm."
+      supported: false
+    - id: "source-build"
+      label: "Source build"
+      type: "source"
+      summary: "Clone the repository, build it, and link the CLI globally."
+      supported: false
+  directories:
+    installRoot:
+      path: "{{hub_install_root}}"
+      customizable: false
+      purpose: "Hub Installer tracking root; the global pnpm prefix remains package-manager controlled."
+    additional:
+      - id: "openclaw-home"
+        path: "~/.openclaw"
+        customizable: false
+        purpose: "OpenClaw config, workspace, credentials, and optional secrets."
+dataLayout:
+  items:
+    - id: "openclaw-home"
+      title: "OpenClaw home directory"
+      kind: "directory"
+      path: "~/.openclaw"
+      description: "Stores config, workspace content, credentials, agent auth profiles, and optional secrets payloads."
+      includes:
+        - "openclaw.json"
+        - "workspace"
+        - "credentials"
+        - "agents"
+        - "secrets.json"
+      sensitive: true
+      backupByDefault: true
+      uninstallByDefault: "preserve"
+migration:
+  strategies:
+    - id: "carry-forward-openclaw-home"
+      source: "openclaw"
+      title: "Carry forward OpenClaw state"
+      mode: "manual"
+      summary: "Reuse the current OpenClaw home directory after reinstalling the CLI."
+      supported: true
+      dataItemIds:
+        - "openclaw-home"
+      warnings:
+        - "Run `openclaw config validate` and restart the gateway after restoring config changes."
+dependencies:
+  - id: "node"
+    description: "Node.js is required before pnpm can install OpenClaw."
+    check:
+      type: "command"
+      name: "node"
+    install:
+      - id: "install-node-unix"
+        shell: bash
+        when:
+          platforms: [macos, ubuntu]
+        run: |
+          if command -v brew >/dev/null 2>&1; then
+            brew install node
+          elif command -v apt-get >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y nodejs npm
+          else
+            echo "Node.js must be installed manually on this platform." >&2
+            exit 1
+          fi
+      - id: "install-node-win"
+        shell: powershell
+        when:
+          platforms: [windows]
+        run: "winget install --id OpenJS.NodeJS.LTS -e --source winget"
+  - id: "pnpm"
+    description: "pnpm is required to install the OpenClaw package globally."
+    check:
+      type: "command"
+      name: "pnpm"
+    install:
+      - id: "install-pnpm-unix"
+        shell: bash
+        when:
+          platforms: [macos, ubuntu]
+        run: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
+      - id: "install-pnpm-win"
+        shell: powershell
+        when:
+          platforms: [windows]
+        run: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
+lifecycle:
+  preflight:
+    - id: "show-openclaw-pnpm-profile-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: "echo OpenClaw profile=pnpm channel={{openclaw_channel}} onboard={{openclaw_onboard}}"
+    - id: "show-openclaw-pnpm-profile-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: "Write-Host \"OpenClaw profile=pnpm channel={{openclaw_channel}} onboard={{openclaw_onboard}}\""
+  healthcheck:
+    - id: "openclaw-pnpm-version"
+      run: "openclaw --version"
+    - id: "openclaw-pnpm-doctor"
+      run: "openclaw doctor --non-interactive"
+      continueOnError: true
+  uninstall:
+    - id: "openclaw-pnpm-uninstall-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: |
+        if command -v pnpm >/dev/null 2>&1; then
+          pnpm remove -g openclaw || pnpm uninstall -g openclaw || true
+        elif command -v npm >/dev/null 2>&1; then
+          npm uninstall -g openclaw || true
+        fi
+    - id: "openclaw-pnpm-uninstall-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        if (Get-Command pnpm -ErrorAction SilentlyContinue) {
+          try {
+            pnpm remove -g openclaw
+          } catch {
+            try {
+              pnpm uninstall -g openclaw
+            } catch {
+              Write-Host "OpenClaw was not removed through pnpm."
+            }
+          }
+        } elseif (Get-Command npm -ErrorAction SilentlyContinue) {
+          try {
+            npm uninstall -g openclaw
+          } catch {
+            Write-Host "OpenClaw was not removed through npm."
+          }
+        }
+artifacts:
+  - id: "openclaw-install-pnpm"
+    type: "command"
+    commands:
+      - id: "install-openclaw-pnpm"
+        run: "pnpm add -g openclaw@{{openclaw_channel}}"
+      - id: "approve-openclaw-builds-unix"
+        shell: bash
+        when:
+          platforms: [macos, ubuntu]
+        run: "pnpm approve-builds -g || true"
+      - id: "approve-openclaw-builds-win"
+        shell: powershell
+        when:
+          platforms: [windows]
+        run: |
+          try {
+            pnpm approve-builds -g
+          } catch {
+            Write-Host "pnpm approve-builds returned non-zero; continuing."
+          }
+      - id: "openclaw-pnpm-onboard-unix"
+        shell: bash
+        when:
+          platforms: [macos, ubuntu]
+        run: |
+          if [ "{{openclaw_onboard}}" = "true" ]; then
+            openclaw onboard --install-daemon
+          fi
+      - id: "openclaw-pnpm-onboard-win"
+        shell: powershell
+        when:
+          platforms: [windows]
+        run: |
+          if ("{{openclaw_onboard}}" -eq "true") {
+            openclaw onboard --install-daemon
+          }

@@ -1,0 +1,68 @@
+{
+  "name": "hub-installer",
+  "version": "0.1.0",
+  "description": "Cross-platform software installer engine for Node.js and TypeScript.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/types/index.d.ts",
+  "bin": {
+    "hub-installer": "dist/cli.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    },
+    "./cli": {
+      "import": "./dist/cli.mjs"
+    }
+  },
+  "files": [
+    "dist",
+    "schemas",
+    "registry",
+    "examples",
+    "docs/manifest-spec.md",
+    "docs/registry-spec.md",
+    "docs/openclaw-profile-architecture.md"
+  ],
+  "scripts": {
+    "build": "vite build --config vite.config.ts && vite build --config vite.config.cli.ts",
+    "dev": "vite build --watch --config vite.config.ts",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e-dry-run": "node scripts/e2e-dry-run.mjs",
+    "verify": "pnpm typecheck && pnpm build && pnpm test && pnpm test:e2e-dry-run"
+  },
+  "keywords": [
+    "installer",
+    "nodejs",
+    "typescript",
+    "vite",
+    "cli",
+    "cross-platform"
+  ],
+  "author": "",
+  "license": "AGPL-3.0-only",
+  "packageManager": "pnpm@10.0.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "commander": "^14.0.3",
+    "yaml": "^2.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.3",
+    "vite-plugin-dts": "^4.5.4",
+    "vitepress": "^1.6.4",
+    "vitest": "^4.1.2"
+  }
+}

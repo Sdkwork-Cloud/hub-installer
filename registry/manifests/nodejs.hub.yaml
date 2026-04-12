@@ -1,0 +1,344 @@
+schemaVersion: "1.0"
+$schema: "../../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "Node.js Install (Multi-Method)"
+  version: "2026.03.08"
+  description: "Install Node.js with OS package managers or version managers."
+  homepage: "https://nodejs.org/"
+platforms:
+  - windows
+  - macos
+  - ubuntu
+variables:
+  nodejs_install_method: "os-package"
+  nodejs_windows_package_manager: "winget"
+  nodejs_version_major: "24"
+  nodejs_version: "24"
+  nodejs_enable_corepack: "true"
+defaults:
+  sudo: true
+  timeoutMs: 1200000
+lifecycle:
+  preflight:
+    - id: "show-nodejs-method-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: "echo Node.js install method={{nodejs_install_method}} version={{nodejs_version}}"
+    - id: "show-nodejs-method-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: "Write-Host \"Node.js install method={{nodejs_install_method}} version={{nodejs_version}} manager={{nodejs_windows_package_manager}}\""
+    - id: "validate-nodejs-method-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: |
+        case "{{nodejs_install_method}}" in
+          os-package|fnm|nvm) ;;
+          *)
+            echo "Unsupported nodejs_install_method on Unix: {{nodejs_install_method}}"
+            echo "Supported methods: os-package, fnm, nvm"
+            exit 1
+            ;;
+        esac
+    - id: "validate-nodejs-method-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        $supported = @("os-package", "fnm")
+        if ($supported -notcontains "{{nodejs_install_method}}") {
+          Write-Error "Unsupported nodejs_install_method on Windows: {{nodejs_install_method}}"
+          Write-Error "Supported methods on Windows: os-package, fnm"
+          exit 1
+        }
+        if ("{{nodejs_install_method}}" -eq "os-package") {
+          $managers = @("winget", "choco")
+          if ($managers -notcontains "{{nodejs_windows_package_manager}}") {
+            Write-Error "Unsupported nodejs_windows_package_manager: {{nodejs_windows_package_manager}}"
+            Write-Error "Supported managers: winget, choco"
+            exit 1
+          }
+        }
+  configure:
+    - id: "corepack-enable-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      continueOnError: true
+      run: |
+        if [ "{{nodejs_enable_corepack}}" = "true" ]; then
+          method="{{nodejs_install_method}}"
+          version="{{nodejs_version}}"
+          case "$method" in
+            os-package)
+              corepack enable || true
+              ;;
+            fnm)
+              if [ -x "$HOME/.local/share/fnm/fnm" ]; then
+                export PATH="$HOME/.local/share/fnm:$PATH"
+              elif [ -x "$HOME/.fnm/fnm" ]; then
+                export PATH="$HOME/.fnm:$PATH"
+              fi
+              if command -v fnm >/dev/null 2>&1; then
+                eval "$(fnm env --use-on-cd)" || true
+                fnm use "$version" >/dev/null 2>&1 || true
+                corepack enable || true
+              fi
+              ;;
+            nvm)
+              export NVM_DIR="$HOME/.nvm"
+              if [ -s "$NVM_DIR/nvm.sh" ]; then
+                . "$NVM_DIR/nvm.sh"
+                nvm use "$version" >/dev/null 2>&1 || true
+                corepack enable || true
+              fi
+              ;;
+          esac
+        fi
+    - id: "corepack-enable-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      continueOnError: true
+      run: |
+        if ("{{nodejs_enable_corepack}}" -eq "true") {
+          $method = "{{nodejs_install_method}}"
+          switch ($method) {
+            "os-package" {
+              corepack enable
+            }
+            "fnm" {
+              $version = "{{nodejs_version}}"
+              $fnmCandidates = @(
+                "fnm",
+                "$env:LOCALAPPDATA\\fnm\\fnm.exe",
+                "$env:USERPROFILE\\AppData\\Local\\fnm\\fnm.exe"
+              )
+              $fnmExe = $null
+              foreach ($candidate in $fnmCandidates) {
+                $cmd = Get-Command $candidate -ErrorAction SilentlyContinue
+                if ($cmd) {
+                  $fnmExe = $cmd.Source
+                  break
+                }
+              }
+              if ($fnmExe) {
+                & $fnmExe use $version | Out-Null
+              }
+              corepack enable
+            }
+          }
+        }
+  healthcheck:
+    - id: "node-healthcheck-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: |
+        set -euo pipefail
+        method="{{nodejs_install_method}}"
+        version="{{nodejs_version}}"
+
+        case "$method" in
+          os-package)
+            node --version
+            npm --version
+            ;;
+          fnm)
+            if [ -x "$HOME/.local/share/fnm/fnm" ]; then
+              export PATH="$HOME/.local/share/fnm:$PATH"
+            elif [ -x "$HOME/.fnm/fnm" ]; then
+              export PATH="$HOME/.fnm:$PATH"
+            fi
+            command -v fnm >/dev/null 2>&1
+            eval "$(fnm env --use-on-cd)"
+            fnm use "$version"
+            node --version
+            npm --version
+            ;;
+          nvm)
+            export NVM_DIR="$HOME/.nvm"
+            test -s "$NVM_DIR/nvm.sh"
+            . "$NVM_DIR/nvm.sh"
+            nvm ls "$version"
+            nvm use "$version"
+            node --version
+            npm --version
+            ;;
+        esac
+
+        if [ "{{nodejs_enable_corepack}}" = "true" ]; then
+          corepack --version || true
+        fi
+    - id: "node-healthcheck-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        $method = "{{nodejs_install_method}}"
+        $version = "{{nodejs_version}}"
+
+        switch ($method) {
+          "os-package" {
+            node --version
+            npm --version
+          }
+          "fnm" {
+            $fnmCandidates = @(
+              "fnm",
+              "$env:LOCALAPPDATA\\fnm\\fnm.exe",
+              "$env:USERPROFILE\\AppData\\Local\\fnm\\fnm.exe"
+            )
+            $fnmExe = $null
+            foreach ($candidate in $fnmCandidates) {
+              $cmd = Get-Command $candidate -ErrorAction SilentlyContinue
+              if ($cmd) {
+                $fnmExe = $cmd.Source
+                break
+              }
+            }
+            if (-not $fnmExe) {
+              throw "fnm executable not found."
+            }
+            & $fnmExe use $version | Out-Null
+            node --version
+            npm --version
+          }
+          default {
+            throw "Unsupported method: $method"
+          }
+        }
+
+        if ("{{nodejs_enable_corepack}}" -eq "true") {
+          corepack --version
+        }
+artifacts:
+  - id: "nodejs-install-unix"
+    type: "command"
+    when:
+      platforms: [macos, ubuntu]
+    commands:
+      - id: "nodejs-install-unix-dispatch"
+        shell: bash
+        run: |
+          set -euo pipefail
+          method="{{nodejs_install_method}}"
+          version="{{nodejs_version}}"
+          major="{{nodejs_version_major}}"
+
+          ensure_sudo() {
+            if [ "$(id -u)" -eq 0 ]; then
+              echo ""
+            else
+              echo "sudo"
+            fi
+          }
+
+          case "$method" in
+            os-package)
+              if [ "{{platform}}" = "macos" ]; then
+                brew install node
+              else
+                if [ "$(id -u)" -eq 0 ]; then
+                  curl -fsSL "https://deb.nodesource.com/setup_${major}.x" | bash -
+                else
+                  curl -fsSL "https://deb.nodesource.com/setup_${major}.x" | sudo -E bash -
+                fi
+                SUDO="$(ensure_sudo)"
+                $SUDO apt-get install -y nodejs
+              fi
+              ;;
+            fnm)
+              if ! command -v fnm >/dev/null 2>&1; then
+                curl -fsSL https://fnm.vercel.app/install | bash
+              fi
+              if ! command -v fnm >/dev/null 2>&1; then
+                if [ -x "$HOME/.local/share/fnm/fnm" ]; then
+                  export PATH="$HOME/.local/share/fnm:$PATH"
+                elif [ -x "$HOME/.fnm/fnm" ]; then
+                  export PATH="$HOME/.fnm:$PATH"
+                fi
+              fi
+              if ! command -v fnm >/dev/null 2>&1; then
+                echo "fnm installer completed but fnm is not in PATH."
+                exit 1
+              fi
+              eval "$(fnm env --use-on-cd)"
+              fnm install "$version"
+              fnm default "$version"
+              fnm use "$version"
+              ;;
+            nvm)
+              export NVM_DIR="$HOME/.nvm"
+              if [ ! -s "$NVM_DIR/nvm.sh" ]; then
+                curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+              fi
+              . "$NVM_DIR/nvm.sh"
+              nvm install "$version"
+              nvm alias default "$version"
+              nvm use "$version"
+              ;;
+            *)
+              echo "Unsupported method: $method"
+              exit 1
+              ;;
+          esac
+  - id: "nodejs-install-windows"
+    type: "command"
+    when:
+      platforms: [windows]
+    commands:
+      - id: "nodejs-install-win-dispatch"
+        shell: powershell
+        run: |
+          $method = "{{nodejs_install_method}}"
+          $version = "{{nodejs_version}}"
+          switch ($method) {
+            "os-package" {
+              $manager = "{{nodejs_windows_package_manager}}"
+              if ($manager -eq "winget") {
+                winget install --id OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements
+              } elseif ($manager -eq "choco") {
+                choco install nodejs-lts -y
+              } else {
+                throw "Unsupported manager: $manager"
+              }
+            }
+            "fnm" {
+              $fnmCmd = Get-Command fnm -ErrorAction SilentlyContinue
+              if (-not $fnmCmd) {
+                if (Get-Command winget -ErrorAction SilentlyContinue) {
+                  winget install --id Schniz.fnm --accept-package-agreements --accept-source-agreements
+                } elseif (Get-Command choco -ErrorAction SilentlyContinue) {
+                  choco install fnm -y
+                } else {
+                  throw "fnm is missing and neither winget nor choco is available."
+                }
+              }
+              $fnmCandidates = @(
+                "fnm",
+                "$env:LOCALAPPDATA\\fnm\\fnm.exe",
+                "$env:USERPROFILE\\AppData\\Local\\fnm\\fnm.exe"
+              )
+              $fnmExe = $null
+              foreach ($candidate in $fnmCandidates) {
+                $cmd = Get-Command $candidate -ErrorAction SilentlyContinue
+                if ($cmd) {
+                  $fnmExe = $cmd.Source
+                  break
+                }
+              }
+              if (-not $fnmExe) {
+                throw "fnm executable not found after installation."
+              }
+              & $fnmExe install $version
+              & $fnmExe default $version
+              & $fnmExe use $version
+            }
+            default {
+              throw "Unsupported method: $method"
+            }
+          }

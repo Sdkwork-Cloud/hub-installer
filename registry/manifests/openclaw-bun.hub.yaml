@@ -1,0 +1,52 @@
+schemaVersion: "1.0"
+$schema: "../../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "OpenClaw Install (Bun Experimental)"
+  version: "2026.03.08"
+  description: "Install OpenClaw from source with Bun runtime (experimental)."
+  homepage: "https://docs.openclaw.ai/install/bun"
+platforms:
+  - macos
+  - ubuntu
+variables:
+  hub_software_name: "openclaw"
+  hub_install_control_level: "managed"
+  openclaw_source_dir: "{{hub_work_root}}"
+defaults:
+  sudo: true
+  timeoutMs: 2400000
+lifecycle:
+  preflight:
+    - id: "show-openclaw-bun-profile"
+      shell: bash
+      run: "echo OpenClaw profile=bun source_dir={{openclaw_source_dir}}"
+  healthcheck:
+    - id: "openclaw-bun-health"
+      shell: bash
+      run: |
+        set -euo pipefail
+        command -v bun >/dev/null 2>&1
+        bun --version
+artifacts:
+  - id: "openclaw-bun-build-unix"
+    type: "command"
+    commands:
+      - id: "build-openclaw-with-bun-unix"
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v git >/dev/null 2>&1; then
+            echo "git is required for bun install."
+            exit 1
+          fi
+          if ! command -v bun >/dev/null 2>&1; then
+            curl -fsSL https://bun.sh/install | bash
+            export PATH="$HOME/.bun/bin:$PATH"
+          fi
+          if [ ! -d "{{openclaw_source_dir}}/.git" ]; then
+            git clone https://github.com/openclaw/openclaw.git "{{openclaw_source_dir}}"
+          fi
+          cd "{{openclaw_source_dir}}"
+          bun install
+          bun run build
+          echo "Bun mode is experimental for OpenClaw gateway runtime."

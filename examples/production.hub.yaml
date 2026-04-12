@@ -1,0 +1,199 @@
+schemaVersion: "1.0"
+$schema: "../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "Hub Installer Production Bootstrap"
+  version: "2026.03.01"
+  description: "Production-grade multi-platform bootstrap for runtime, repo and model delivery."
+  maintainers:
+    - "ops@your-company.example"
+platforms:
+  - windows
+  - macos
+  - ubuntu
+variables:
+  workspace_dir: "{{home}}/workspace/hub-runtime"
+  app_repo: "https://github.com/your-org/your-app.git"
+  app_dir: "{{workspace_dir}}/app"
+  model_repo_id: "openai/whisper-large-v3"
+  model_dir: "{{workspace_dir}}/models/whisper-large-v3"
+defaults:
+  sudo: true
+  timeoutMs: 1200000
+  cwd: "{{workspace_dir}}"
+  env:
+    HUB_ENV: "production"
+    NODE_ENV: "production"
+dependencies:
+  - id: "git-command"
+    description: "Git binary availability"
+    check:
+      type: "command"
+      name: "git"
+  - id: "node-runtime"
+    description: "Node.js runtime (LTS)"
+    check:
+      type: "command"
+      name: "node"
+    install:
+      - description: "Install Node.js LTS via winget"
+        run: "winget install --id OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements"
+        shell: powershell
+        when:
+          platforms: [windows]
+      - description: "Install Node.js via brew"
+        run: "brew install node"
+        shell: bash
+        when:
+          platforms: [macos]
+      - description: "Install Node.js via apt"
+        run: "apt-get update && apt-get install -y nodejs npm"
+        shell: bash
+        elevated: true
+        when:
+          platforms: [ubuntu]
+  - id: "pnpm-command"
+    description: "pnpm package manager"
+    check:
+      type: "command"
+      name: "pnpm"
+    install:
+      - description: "Install pnpm globally"
+        run: "npm install -g pnpm"
+  - id: "huggingface-cli"
+    description: "huggingface-cli for model download method"
+    check:
+      type: "command"
+      name: "huggingface-cli"
+    install:
+      - run: "pip install --upgrade huggingface_hub[cli]"
+        shell: bash
+        when:
+          platforms: [macos, ubuntu]
+      - run: "python -m pip install --upgrade huggingface_hub[cli]"
+        shell: powershell
+        when:
+          platforms: [windows]
+lifecycle:
+  preflight:
+    - id: "echo-start"
+      run: "echo [preflight] platform={{platform}} workspace={{workspace_dir}}"
+    - id: "mkdir-workspace-unix"
+      run: "mkdir -p {{workspace_dir}} {{workspace_dir}}/models"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+    - id: "mkdir-workspace-win"
+      run: "New-Item -ItemType Directory -Path {{workspace_dir}} -Force | Out-Null; New-Item -ItemType Directory -Path {{workspace_dir}}\\models -Force | Out-Null"
+      shell: powershell
+      when:
+        platforms: [windows]
+  preInstall:
+    - id: "runtime-versions"
+      run: "node --version && pnpm --version && git --version"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+    - id: "runtime-versions-win"
+      run: "node --version; pnpm --version; git --version"
+      shell: powershell
+      when:
+        platforms: [windows]
+  postInstall:
+    - id: "summary"
+      run: "echo [postInstall] all artifacts completed"
+  configure:
+    - id: "write-env-unix"
+      run: |
+        cat > "{{workspace_dir}}/.env" <<'EOF'
+        HUB_ENV=production
+        APP_DIR={{app_dir}}
+        MODEL_DIR={{model_dir}}
+        EOF
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+    - id: "write-env-win"
+      run: |
+        @"
+        HUB_ENV=production
+        APP_DIR={{app_dir}}
+        MODEL_DIR={{model_dir}}
+        "@ | Set-Content -Path "{{workspace_dir}}\\.env"
+      shell: powershell
+      when:
+        platforms: [windows]
+  healthcheck:
+    - id: "check-node"
+      run: "node --version"
+    - id: "check-pnpm"
+      run: "pnpm --version"
+    - id: "check-model-dir-unix"
+      run: "test -d {{model_dir}}"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+    - id: "check-model-dir-win"
+      run: "Test-Path '{{model_dir}}' | Out-Null; if (!(Test-Path '{{model_dir}}')) { exit 1 }"
+      shell: powershell
+      when:
+        platforms: [windows]
+artifacts:
+  - id: "system-toolchain"
+    type: "package"
+    title: "Install OS-level runtime dependencies"
+    install:
+      byPlatform:
+        windows:
+          source: "winget://Git.Git"
+        macos:
+          source: "brew://git"
+        ubuntu:
+          source: "apt://git"
+    postInstall:
+      - run: "echo [artifact] git package installed"
+  - id: "media-backend"
+    type: "package"
+    title: "Install FFmpeg for audio processing pipeline"
+    install:
+      byPlatform:
+        windows:
+          source: "winget://Gyan.FFmpeg"
+        macos:
+          source: "brew://ffmpeg"
+        ubuntu:
+          source: "apt://ffmpeg"
+  - id: "application-source"
+    type: "git"
+    title: "Checkout application repository"
+    repository: "{{app_repo}}"
+    destination: "{{app_dir}}"
+    strategy: "clone-or-pull"
+    ref: "main"
+    submodules: true
+    build:
+      - run: "pnpm install --frozen-lockfile"
+        cwd: "{{app_dir}}"
+      - run: "pnpm build"
+        cwd: "{{app_dir}}"
+  - id: "application-model"
+    type: "huggingface"
+    title: "Download model assets"
+    repoId: "{{model_repo_id}}"
+    destination: "{{model_dir}}"
+    method: "huggingface-cli"
+    revision: "main"
+    tokenEnv: "HF_TOKEN"
+    include:
+      - "*.json"
+      - "*.safetensors"
+      - "*.txt"
+    postInstall:
+      - run: "echo [artifact] model downloaded to {{model_dir}}"
+  - id: "service-bootstrap"
+    type: "command"
+    title: "Service bootstrap commands"
+    commands:
+      - run: "pnpm --dir {{app_dir}} run setup:prod"
+        continueOnError: true
+      - run: "pnpm --dir {{app_dir}} run migrate"
+

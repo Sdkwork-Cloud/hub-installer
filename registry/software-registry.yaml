@@ -1,0 +1,335 @@
+schemaVersion: "1.0"
+$schema: "../schemas/hub-installer.registry.schema.json"
+metadata:
+  name: "Hub Installer Official Registry"
+  version: "2026.03.20"
+  updatedAt: "2026-03-20"
+entries:
+  - name: "git"
+    aliases: ["git-scm", "scm-git"]
+    description: "Git source control command line tool."
+    homepage: "https://git-scm.com/"
+    tags: ["dev", "scm", "toolchain"]
+    manifest: "./manifests/git.hub.yaml"
+  - name: "nodejs"
+    aliases: ["node", "node-lts"]
+    description: "Node.js runtime installer (OS package, fnm, nvm) with platform-aware defaults."
+    homepage: "https://nodejs.org/"
+    tags: ["runtime", "javascript", "toolchain"]
+    manifest: "./manifests/nodejs.hub.yaml"
+    variables:
+      hub_software_name: "nodejs"
+      hub_install_control_level: "partial"
+      nodejs_install_method: "os-package"
+      nodejs_version_major: "24"
+      nodejs_version: "24"
+      nodejs_windows_package_manager: "winget"
+  - name: "npm"
+    aliases: ["node-package-manager", "npm-cli"]
+    description: "npm package manager bootstrap and refresh profile backed by Node.js."
+    homepage: "https://www.npmjs.com/"
+    tags: ["package-manager", "javascript", "toolchain"]
+    manifest: "./manifests/npm.hub.yaml"
+    variables:
+      hub_software_name: "npm"
+      hub_install_control_level: "partial"
+      npm_channel: "latest"
+  - name: "pnpm"
+    aliases: ["pnpm-cli", "package-manager-pnpm"]
+    description: "pnpm package manager profile with Corepack-aware activation."
+    homepage: "https://pnpm.io/"
+    tags: ["package-manager", "javascript", "toolchain"]
+    manifest: "./manifests/pnpm.hub.yaml"
+    variables:
+      hub_software_name: "pnpm"
+      hub_install_control_level: "partial"
+      pnpm_version: "latest"
+  - name: "brew"
+    aliases: ["homebrew", "linuxbrew"]
+    description: "Homebrew installer for macOS, Ubuntu, and WSL-backed Windows hosts."
+    homepage: "https://brew.sh/"
+    tags: ["package-manager", "macos", "linux", "toolchain"]
+    manifest: "./manifests/brew.hub.yaml"
+    variables:
+      hub_software_name: "brew"
+      hub_install_control_level: "partial"
+  - name: "python"
+    aliases: ["python3", "cpython"]
+    description: "Python runtime installer (OS package, pyenv, uv) across Windows/macOS/Ubuntu."
+    homepage: "https://www.python.org/"
+    tags: ["runtime", "python", "toolchain"]
+    manifest: "./manifests/python.hub.yaml"
+    variables:
+      hub_software_name: "python"
+      hub_install_control_level: "partial"
+      python_install_method: "os-package"
+      python_version: "3.13"
+      python_windows_package_manager: "winget"
+      python_windows_package_id: "Python.Python.{{python_version}}"
+  - name: "ffmpeg"
+    aliases: ["media-backend"]
+    description: "FFmpeg media processing toolkit."
+    homepage: "https://ffmpeg.org/"
+    tags: ["media", "audio", "video"]
+    manifest: "./manifests/ffmpeg.hub.yaml"
+  - name: "openclaw"
+    aliases: ["claw", "open-claw"]
+    description: "OpenClaw recommended installer-script profile (default)."
+    homepage: "https://docs.openclaw.ai/install"
+    tags: ["ai", "agent", "cli", "gateway"]
+    manifest: "./manifests/openclaw.hub.yaml"
+    variables:
+      hub_software_name: "openclaw"
+      hub_install_control_level: "opaque"
+      openclaw_channel: "latest"
+      openclaw_onboard: "true"
+      openclaw_installer_no_prompt: "false"
+      openclaw_installer_dry_run: "false"
+      openclaw_installer_verbose: "false"
+  - name: "openclaw-git"
+    aliases: ["openclaw-installer-git", "claw-git"]
+    description: "OpenClaw installer-script git mode profile."
+    homepage: "https://docs.openclaw.ai/install/installer"
+    tags: ["ai", "agent", "cli", "gateway", "git"]
+    manifest: "./manifests/openclaw-installer-script-git.hub.yaml"
+    variables:
+      hub_software_name: "openclaw"
+      hub_install_control_level: "partial"
+      openclaw_channel: "latest"
+      openclaw_onboard: "true"
+      openclaw_source_dir: "{{hub_work_root}}"
+      openclaw_git_update: "true"
+      openclaw_installer_no_prompt: "false"
+      openclaw_installer_dry_run: "false"
+      openclaw_installer_verbose: "false"
+  - name: "openclaw-cli-script"
+    aliases: ["openclaw-local-prefix", "claw-cli"]
+    description: "OpenClaw install-cli.sh profile for local prefix installs."
+    homepage: "https://docs.openclaw.ai/install/installer"
+    tags: ["ai", "agent", "cli", "gateway", "local-prefix"]
+    manifest: "./manifests/openclaw-installer-cli-script.hub.yaml"
+    variables:
+      hub_software_name: "openclaw"
+      hub_install_control_level: "managed"
+      openclaw_channel: "latest"
+      openclaw_onboard: "false"
+      openclaw_install_prefix: "{{hub_install_root}}"
+      openclaw_install_cli_node_version: "22.22.0"
+      openclaw_install_cli_json: "false"
+      openclaw_install_cli_set_npm_prefix: "false"
+  - name: "openclaw-npm"
+    aliases: ["claw-npm"]
+    description: "OpenClaw npm global install profile."
+    homepage: "https://docs.openclaw.ai/install"
+    tags: ["ai", "agent", "cli", "gateway", "npm"]
+    manifest: "./manifests/openclaw-npm.hub.yaml"
+    variables:
+      hub_software_name: "openclaw"
+      hub_install_control_level: "partial"
+      openclaw_channel: "latest"
+      openclaw_onboard: "true"
+  - name: "openclaw-wsl"
+    aliases: ["claw-wsl"]
+    description: "OpenClaw WSL install profile for Windows hosts."
+    homepage: "https://docs.openclaw.ai/install"
+    tags: ["ai", "agent", "cli", "gateway", "wsl"]
+    manifest: "./manifests/openclaw-wsl.hub.yaml"
+    variables:
+      hub_software_name: "openclaw"
+      hub_install_control_level: "partial"
+      openclaw_channel: "latest"
+      openclaw_onboard: "true"
+      openclaw_wsl_enable_systemd: "true"
+  - name: "openclaw-pnpm"
+    aliases: ["claw-pnpm"]
+    description: "OpenClaw pnpm global install profile."
+    homepage: "https://docs.openclaw.ai/install"
+    tags: ["ai", "agent", "cli", "gateway", "pnpm"]
+    manifest: "./manifests/openclaw-pnpm.hub.yaml"
+    variables:
+      hub_software_name: "openclaw"
+      hub_install_control_level: "partial"
+      openclaw_channel: "latest"
+      openclaw_onboard: "true"
+  - name: "openclaw-source"
+    aliases: ["claw-source"]
+    description: "OpenClaw source build profile."
+    homepage: "https://docs.openclaw.ai/install"
+    tags: ["ai", "agent", "cli", "gateway", "source"]
+    manifest: "./manifests/openclaw-source.hub.yaml"
+    variables:
+      hub_software_name: "openclaw"
+      hub_install_control_level: "managed"
+      openclaw_source_dir: "{{hub_work_root}}"
+      openclaw_git_update: "true"
+      openclaw_onboard: "true"
+  - name: "openclaw-bun"
+    aliases: ["claw-bun"]
+    description: "OpenClaw Bun experimental profile."
+    homepage: "https://docs.openclaw.ai/install/bun"
+    tags: ["ai", "agent", "cli", "gateway", "bun"]
+    manifest: "./manifests/openclaw-bun.hub.yaml"
+    variables:
+      hub_software_name: "openclaw"
+      hub_install_control_level: "managed"
+      openclaw_source_dir: "{{hub_work_root}}"
+  - name: "openclaw-docker"
+    aliases: ["claw-docker"]
+    description: "OpenClaw Docker profile."
+    homepage: "https://docs.openclaw.ai/install/docker"
+    tags: ["ai", "agent", "gateway", "docker"]
+    manifest: "./manifests/openclaw-docker.hub.yaml"
+    variables:
+      hub_software_name: "openclaw"
+      hub_install_control_level: "opaque"
+      openclaw_source_dir: "{{hub_work_root}}"
+      openclaw_docker_image: "openclaw:local"
+      openclaw_docker_extra_mounts: ""
+      openclaw_docker_home_volume: ""
+      openclaw_docker_apt_packages: ""
+  - name: "openclaw-podman"
+    aliases: ["claw-podman"]
+    description: "OpenClaw Podman profile."
+    homepage: "https://docs.openclaw.ai/install/podman"
+    tags: ["ai", "agent", "gateway", "podman"]
+    manifest: "./manifests/openclaw-podman.hub.yaml"
+    variables:
+      hub_software_name: "openclaw"
+      hub_install_control_level: "opaque"
+      openclaw_source_dir: "{{hub_work_root}}"
+      openclaw_podman_quadlet: "false"
+      openclaw_podman_container_only: "false"
+      openclaw_docker_apt_packages: ""
+      openclaw_extensions: ""
+  - name: "openclaw-ansible"
+    aliases: ["claw-ansible"]
+    description: "OpenClaw Ansible automation profile."
+    homepage: "https://docs.openclaw.ai/install/ansible"
+    tags: ["ai", "agent", "gateway", "ansible"]
+    manifest: "./manifests/openclaw-ansible.hub.yaml"
+    variables:
+      hub_software_name: "openclaw"
+      hub_install_control_level: "opaque"
+      openclaw_ansible_dir: "{{hub_work_root}}/ansible"
+  - name: "openclaw-nix"
+    aliases: ["claw-nix"]
+    description: "OpenClaw Nix declarative profile."
+    homepage: "https://docs.openclaw.ai/install/nix"
+    tags: ["ai", "agent", "gateway", "nix"]
+    manifest: "./manifests/openclaw-nix.hub.yaml"
+    variables:
+      hub_software_name: "openclaw"
+      hub_install_control_level: "opaque"
+      openclaw_nix_flake: "github:openclaw/nix-openclaw"
+  - name: "openclaw-all"
+    aliases: ["claw-all", "openclaw-multi"]
+    description: "OpenClaw legacy all-in-one multi-method manifest with openclaw_install_method selector."
+    homepage: "https://docs.openclaw.ai/install"
+    tags: ["ai", "agent", "cli", "gateway", "legacy"]
+    manifest: "./manifests/openclaw-all.hub.yaml"
+    variables:
+      hub_software_name: "openclaw"
+      hub_install_control_level: "partial"
+      openclaw_install_method: "installer-script"
+      openclaw_channel: "latest"
+      openclaw_onboard: "true"
+      openclaw_source_dir: "{{hub_work_root}}"
+      openclaw_install_prefix: "{{hub_install_root}}"
+      openclaw_ansible_dir: "{{hub_work_root}}/ansible"
+      openclaw_docker_extra_mounts: ""
+      openclaw_docker_home_volume: ""
+      openclaw_docker_apt_packages: ""
+      openclaw_install_cli_json: "false"
+      openclaw_install_cli_set_npm_prefix: "false"
+      openclaw_installer_no_prompt: "false"
+      openclaw_installer_dry_run: "false"
+      openclaw_installer_verbose: "false"
+  - name: "zeroclaw"
+    aliases: ["zero-claw"]
+    description: "ZeroClaw recommended Rust-native source install profile."
+    homepage: "https://github.com/zeroclaw-labs/zeroclaw"
+    tags: ["ai", "agent", "cli", "rust", "source"]
+    manifest: "./manifests/zeroclaw-source.hub.yaml"
+    variables:
+      hub_software_name: "zeroclaw"
+      hub_install_control_level: "managed"
+      repo_url: "https://github.com/zeroclaw-labs/zeroclaw.git"
+      destination: "{{hub_work_root}}/zeroclaw"
+  - name: "zeroclaw-pnpm"
+    aliases: ["zero-claw-pnpm"]
+    description: "Legacy ZeroClaw compatibility alias routed to the Rust-native source install profile."
+    homepage: "https://github.com/zeroclaw-labs/zeroclaw"
+    tags: ["ai", "agent", "cli", "legacy", "rust", "source"]
+    manifest: "./manifests/zeroclaw-source.hub.yaml"
+    variables:
+      hub_software_name: "zeroclaw"
+      hub_install_control_level: "managed"
+      repo_url: "https://github.com/zeroclaw-labs/zeroclaw.git"
+      destination: "{{hub_work_root}}/zeroclaw"
+  - name: "zeroclaw-source"
+    aliases: ["zero-claw-source"]
+    description: "ZeroClaw Rust-native source clone and install profile."
+    homepage: "https://github.com/zeroclaw-labs/zeroclaw"
+    tags: ["ai", "agent", "cli", "rust", "source"]
+    manifest: "./manifests/zeroclaw-source.hub.yaml"
+    variables:
+      hub_software_name: "zeroclaw"
+      hub_install_control_level: "managed"
+      repo_url: "https://github.com/zeroclaw-labs/zeroclaw.git"
+      destination: "{{hub_work_root}}/zeroclaw"
+  - name: "ironclaw"
+    aliases: ["iron-claw"]
+    description: "IronClaw recommended Rust-native source install profile."
+    homepage: "https://github.com/nearai/ironclaw"
+    tags: ["ai", "agent", "cli", "rust", "source"]
+    manifest: "./manifests/ironclaw-source.hub.yaml"
+    variables:
+      hub_software_name: "ironclaw"
+      hub_install_control_level: "managed"
+      repo_url: "https://github.com/nearai/ironclaw.git"
+      destination: "{{hub_work_root}}/ironclaw"
+  - name: "ironclaw-pnpm"
+    aliases: ["iron-claw-pnpm"]
+    description: "Legacy IronClaw compatibility alias routed to the Rust-native source install profile."
+    homepage: "https://github.com/nearai/ironclaw"
+    tags: ["ai", "agent", "cli", "legacy", "rust", "source"]
+    manifest: "./manifests/ironclaw-source.hub.yaml"
+    variables:
+      hub_software_name: "ironclaw"
+      hub_install_control_level: "managed"
+      repo_url: "https://github.com/nearai/ironclaw.git"
+      destination: "{{hub_work_root}}/ironclaw"
+  - name: "ironclaw-source"
+    aliases: ["iron-claw-source"]
+    description: "IronClaw Rust-native source clone and install profile."
+    homepage: "https://github.com/nearai/ironclaw"
+    tags: ["ai", "agent", "cli", "rust", "source"]
+    manifest: "./manifests/ironclaw-source.hub.yaml"
+    variables:
+      hub_software_name: "ironclaw"
+      hub_install_control_level: "managed"
+      repo_url: "https://github.com/nearai/ironclaw.git"
+      destination: "{{hub_work_root}}/ironclaw"
+  - name: "codex"
+    aliases: ["openai-codex", "codex-cli"]
+    description: "Codex CLI installer (Rust source build or GitHub release DotSlash bootstrap)."
+    homepage: "https://github.com/openai/codex"
+    tags: ["ai", "agent", "cli", "rust"]
+    manifest: "./manifests/codex.hub.yaml"
+    variables:
+      hub_software_name: "codex"
+      hub_install_control_level: "managed"
+      codex_install_method: "source-build"
+      codex_git_ref: "main"
+      codex_release_tag: "latest"
+      codex_install_just: "true"
+      codex_install_nextest: "false"
+  - name: "github-project"
+    aliases: ["github-repo", "repo-install"]
+    description: "Generic GitHub repository clone/pull and build workflow."
+    homepage: "https://github.com/"
+    tags: ["github", "git", "source-code"]
+    manifest: "./manifests/github-project.hub.yaml"
+    variables:
+      repo_url: "https://github.com/octocat/Hello-World.git"
+      destination: "{{home}}/workspace/github-project"

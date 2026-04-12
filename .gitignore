@@ -1,0 +1,21 @@
+node_modules
+dist
+coverage
+*.log
+.pnpm-home
+.pnpm-store
+.nested-git-backups
+.tmp/
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+target/
+rust/target/
+**/*.rs.bk
+
+# Local reference repositories (not part of hub-installer source)
+codex/
+openclaw/
+zeroclaw/
+
+# Local agent/runtime instructions
+AGENTS.md

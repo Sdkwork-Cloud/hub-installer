@@ -1,0 +1,28 @@
+schemaVersion: "1.0"
+$schema: "../../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "FFmpeg Install"
+  version: "1.0.0"
+  description: "Install FFmpeg media toolkit."
+platforms:
+  - windows
+  - macos
+  - ubuntu
+defaults:
+  sudo: true
+  timeoutMs: 300000
+artifacts:
+  - id: "ffmpeg-package"
+    type: "package"
+    install:
+      byPlatform:
+        windows:
+          source: "winget://Gyan.FFmpeg"
+        macos:
+          source: "brew://ffmpeg"
+        ubuntu:
+          source: "apt://ffmpeg"
+lifecycle:
+  healthcheck:
+    - run: "ffmpeg -version"
+

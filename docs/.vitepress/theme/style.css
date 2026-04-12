@@ -1,0 +1,31 @@
+:root {
+  --vp-font-family-base: "IBM Plex Sans", "Segoe UI", "Helvetica Neue", sans-serif;
+  --vp-font-family-mono: "JetBrains Mono", "Cascadia Code", "SFMono-Regular", monospace;
+  --vp-c-brand-1: #0f766e;
+  --vp-c-brand-2: #115e59;
+  --vp-c-brand-3: #134e4a;
+  --vp-c-brand-soft: rgba(15, 118, 110, 0.14);
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #0f766e 10%, #2563eb 50%, #f97316 90%);
+  --vp-home-hero-image-background-image:
+    radial-gradient(circle at 25% 25%, rgba(15, 118, 110, 0.28), transparent 36%),
+    radial-gradient(circle at 75% 20%, rgba(37, 99, 235, 0.24), transparent 30%),
+    radial-gradient(circle at 65% 80%, rgba(249, 115, 22, 0.18), transparent 26%);
+  --vp-home-hero-image-filter: blur(56px);
+}
+
+.VPContent.is-home {
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(255, 255, 255, 1)),
+    radial-gradient(circle at top left, rgba(15, 118, 110, 0.06), transparent 30%);
+}
+
+.VPFeature {
+  border: 1px solid rgba(15, 118, 110, 0.12);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92));
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06);
+}
+
+.custom-block.tip {
+  border-color: rgba(15, 118, 110, 0.3);
+}

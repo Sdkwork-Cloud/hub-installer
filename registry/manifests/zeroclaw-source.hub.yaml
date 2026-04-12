@@ -1,0 +1,161 @@
+schemaVersion: "1.0"
+$schema: "../../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "ZeroClaw Install (Source)"
+  version: "2026.03.19"
+  description: "Clone or update the official ZeroClaw repository and install it through Cargo."
+  homepage: "https://github.com/zeroclaw-labs/zeroclaw"
+platforms:
+  - windows
+  - macos
+  - ubuntu
+variables:
+  hub_software_name: "zeroclaw"
+  hub_install_control_level: "managed"
+  repo_url: "https://github.com/zeroclaw-labs/zeroclaw.git"
+  destination: "{{hub_work_root}}/zeroclaw"
+defaults:
+  sudo: false
+  timeoutMs: 3600000
+installation:
+  method:
+    id: "source-build"
+    label: "Rust source build"
+    type: "source"
+    summary: "Clone the official ZeroClaw repository and install the binary through Cargo."
+    supported: true
+    documentationUrl: "https://github.com/zeroclaw-labs/zeroclaw"
+  alternatives:
+    - id: "shell-script"
+      label: "Shell install"
+      type: "script"
+      summary: "Documented upstream shell-based setup flow handled outside this profile."
+      supported: false
+  directories:
+    installRoot:
+      path: "{{hub_install_root}}"
+      customizable: true
+      purpose: "Managed Cargo install root for the ZeroClaw binary."
+    workRoot:
+      path: "{{hub_work_root}}"
+      customizable: true
+      purpose: "Repository checkout directory."
+    dataRoot:
+      path: "{{hub_data_root}}"
+      customizable: true
+      purpose: "Managed backup/import root for ZeroClaw assets."
+    additional:
+      - id: "zeroclaw-home"
+        path: "~/.zeroclaw"
+        customizable: false
+        purpose: "ZeroClaw auth, secret key, and workspace home."
+dataLayout:
+  items:
+    - id: "zeroclaw-home"
+      title: "ZeroClaw home directory"
+      kind: "directory"
+      path: "~/.zeroclaw"
+      description: "Stores auth profiles, encrypted secret key material, and workspace state."
+      includes:
+        - "auth-profiles.json"
+        - ".secret_key"
+        - "workspace/skills"
+      sensitive: true
+      backupByDefault: true
+      uninstallByDefault: "preserve"
+migration:
+  strategies:
+    - id: "openclaw-memory-import"
+      source: "openclaw"
+      title: "Import OpenClaw memory"
+      mode: "command"
+      summary: "Preview and import OpenClaw memory through ZeroClaw's built-in migration command."
+      supported: true
+      previewCommands:
+        - run: "zeroclaw migrate openclaw --dry-run"
+      applyCommands:
+        - run: "zeroclaw migrate openclaw"
+      dataItemIds:
+        - "zeroclaw-home"
+      warnings:
+        - "Only memory that ZeroClaw knows how to import is migrated automatically."
+dependencies:
+  - id: "git"
+    check:
+      type: "command"
+      name: "git"
+  - id: "cargo"
+    check:
+      type: "command"
+      name: "cargo"
+artifacts:
+  - id: "zeroclaw-source"
+    type: "git"
+    repository: "{{repo_url}}"
+    destination: "{{destination}}"
+    strategy: "clone-or-pull"
+    build:
+      - run: "cargo install --path . --locked --force --root \"{{hub_install_root}}\""
+        cwd: "{{destination}}"
+        when:
+          fileExists: "{{destination}}/Cargo.toml"
+lifecycle:
+  preflight:
+    - id: "show-zeroclaw-source-profile-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: "echo ZeroClaw profile=source repo={{repo_url}} destination={{destination}}"
+    - id: "show-zeroclaw-source-profile-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: "Write-Host \"ZeroClaw profile=source repo={{repo_url}} destination={{destination}}\""
+  healthcheck:
+    - id: "zeroclaw-source-git"
+      run: "git -C {{destination}} rev-parse --is-inside-work-tree"
+    - id: "zeroclaw-source-version-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: "\"{{hub_install_root}}/bin/zeroclaw\" --version"
+    - id: "zeroclaw-source-version-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: "& \"{{hub_install_root}}\\bin\\zeroclaw.exe\" --version"
+  uninstall:
+    - id: "zeroclaw-source-uninstall-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: |
+        if command -v cargo >/dev/null 2>&1; then
+          cargo uninstall --root "{{hub_install_root}}" zeroclawlabs || cargo uninstall --root "{{hub_install_root}}" zeroclaw || true
+        fi
+        rm -f "{{hub_install_root}}/bin/zeroclaw" || true
+        if [ -d "{{destination}}" ]; then
+          rm -rf "{{destination}}"
+        fi
+    - id: "zeroclaw-source-uninstall-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        if (Get-Command cargo -ErrorAction SilentlyContinue) {
+          try {
+            cargo uninstall --root "{{hub_install_root}}" zeroclawlabs
+          } catch {
+            try {
+              cargo uninstall --root "{{hub_install_root}}" zeroclaw
+            } catch {
+              Write-Host "ZeroClaw was not registered with cargo uninstall."
+            }
+          }
+        }
+        if (Test-Path "{{hub_install_root}}\\bin\\zeroclaw.exe") {
+          Remove-Item "{{hub_install_root}}\\bin\\zeroclaw.exe" -Force -ErrorAction SilentlyContinue
+        }
+        if (Test-Path "{{destination}}") {
+          Remove-Item "{{destination}}" -Recurse -Force -ErrorAction SilentlyContinue
+        }

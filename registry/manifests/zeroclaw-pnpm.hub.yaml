@@ -1,0 +1,56 @@
+schemaVersion: "1.0"
+$schema: "../../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "ZeroClaw Install (pnpm)"
+  version: "2026.03.19"
+  description: "Legacy ZeroClaw pnpm placeholder retained for compatibility; registry defaults now route to the official Rust-native source profile."
+  homepage: "https://github.com/zeroclaw-labs/zeroclaw"
+platforms:
+  - windows
+  - macos
+  - ubuntu
+variables:
+  hub_software_name: "zeroclaw"
+  hub_install_control_level: "partial"
+  zeroclaw_channel: "latest"
+  zeroclaw_onboard: "true"
+defaults:
+  sudo: true
+  timeoutMs: 1200000
+lifecycle:
+  preflight:
+    - id: "show-zeroclaw-pnpm-profile-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: "echo ZeroClaw profile=pnpm channel={{zeroclaw_channel}} onboard={{zeroclaw_onboard}}"
+    - id: "show-zeroclaw-pnpm-profile-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: "Write-Host \"ZeroClaw profile=pnpm channel={{zeroclaw_channel}} onboard={{zeroclaw_onboard}}\""
+  healthcheck:
+    - id: "zeroclaw-version"
+      run: "zeroclaw --version"
+artifacts:
+  - id: "zeroclaw-install-pnpm"
+    type: "command"
+    commands:
+      - id: "install-zeroclaw-pnpm"
+        run: "pnpm add -g zeroclaw@{{zeroclaw_channel}}"
+      - id: "zeroclaw-onboard-unix"
+        shell: bash
+        when:
+          platforms: [macos, ubuntu]
+        run: |
+          if [ "{{zeroclaw_onboard}}" = "true" ]; then
+            zeroclaw onboard --install-daemon
+          fi
+      - id: "zeroclaw-onboard-win"
+        shell: powershell
+        when:
+          platforms: [windows]
+        run: |
+          if ("{{zeroclaw_onboard}}" -eq "true") {
+            zeroclaw onboard --install-daemon
+          }

@@ -1,0 +1,203 @@
+schemaVersion: "1.0"
+$schema: "../../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "OpenClaw Install (Podman)"
+  version: "2026.03.23"
+  description: "Install OpenClaw with the documented rootless Podman workflow and optional Quadlet service setup."
+  homepage: "https://docs.openclaw.ai/install/podman"
+platforms:
+  - macos
+  - ubuntu
+variables:
+  hub_software_name: "openclaw"
+  hub_install_control_level: "opaque"
+  openclaw_source_dir: "{{hub_work_root}}"
+  openclaw_podman_quadlet: "false"
+  openclaw_podman_container_only: "false"
+  openclaw_docker_apt_packages: ""
+  openclaw_extensions: ""
+defaults:
+  sudo: true
+  timeoutMs: 1800000
+  env:
+    OPENCLAW_DOCKER_APT_PACKAGES: "{{openclaw_docker_apt_packages}}"
+    OPENCLAW_EXTENSIONS: "{{openclaw_extensions}}"
+installation:
+  method:
+    id: "podman"
+    label: "Podman workflow"
+    type: "container"
+    summary: "Run the documented rootless Podman deployment workflow with optional Quadlet service installation."
+    supported: true
+    documentationUrl: "https://docs.openclaw.ai/install/podman"
+    notes:
+      - "Creates and manages the dedicated openclaw user described in the upstream Podman guide."
+      - "Set openclaw_podman_quadlet=true to install the Quadlet-backed systemd user service."
+      - "Set openclaw_podman_container_only=true to stop after container and launch script setup."
+  alternatives:
+    - id: "docker"
+      label: "Docker workflow"
+      type: "container"
+      summary: "Use the Docker profile if Podman is not available on this host."
+      supported: false
+    - id: "source-build"
+      label: "Source build"
+      type: "source"
+      summary: "Clone the repository and build OpenClaw directly on the host."
+      supported: false
+  directories:
+    installRoot:
+      path: "{{hub_install_root}}"
+      customizable: true
+      purpose: "Hub Installer tracking root for the Podman workflow."
+    workRoot:
+      path: "{{hub_work_root}}"
+      customizable: true
+      purpose: "Local checkout containing the Podman setup scripts."
+    dataRoot:
+      path: "{{hub_data_root}}"
+      customizable: true
+      purpose: "Managed backup/import root for Podman-hosted OpenClaw data."
+    additional:
+      - id: "openclaw-user-home"
+        path: "/home/openclaw/.openclaw"
+        customizable: false
+        purpose: "Dedicated openclaw user home for config, workspace, and gateway token state."
+dataLayout:
+  items:
+    - id: "openclaw-user-home"
+      title: "OpenClaw Podman user home"
+      kind: "directory"
+      path: "/home/openclaw/.openclaw"
+      description: "Stores the Podman-hosted OpenClaw config, workspace, gateway token, and optional provider secrets under the dedicated openclaw user."
+      includes:
+        - "openclaw.json"
+        - ".env"
+        - "workspace"
+        - "credentials"
+        - "agents"
+      sensitive: true
+      backupByDefault: true
+      uninstallByDefault: "preserve"
+migration:
+  strategies:
+    - id: "carry-forward-openclaw-home"
+      source: "openclaw"
+      title: "Carry forward OpenClaw state into the openclaw Podman user"
+      mode: "manual"
+      summary: "Copy existing OpenClaw config and workspace state into the dedicated openclaw user after the Podman environment is prepared."
+      supported: true
+      dataItemIds:
+        - "openclaw-user-home"
+      warnings:
+        - "Review provider keys and file ownership before reusing host state in the openclaw Podman user."
+dependencies:
+  - id: "git"
+    description: "Git is required to fetch the OpenClaw Podman source tree."
+    check:
+      type: "command"
+      name: "git"
+  - id: "podman"
+    description: "Podman is required to build and run the rootless OpenClaw container stack."
+    check:
+      type: "command"
+      name: "podman"
+    install:
+      - id: "install-podman-macos"
+        shell: bash
+        when:
+          platforms: [macos]
+        run: |
+          if command -v brew >/dev/null 2>&1; then
+            brew install podman
+          else
+            echo "Podman must be installed manually on this platform." >&2
+            exit 1
+          fi
+      - id: "install-podman-ubuntu"
+        shell: bash
+        when:
+          platforms: [ubuntu]
+        run: |
+          if ! command -v apt-get >/dev/null 2>&1; then
+            echo "Podman must be installed manually on this platform." >&2
+            exit 1
+          fi
+          sudo apt-get update
+          sudo apt-get install -y podman uidmap slirp4netns
+lifecycle:
+  preflight:
+    - id: "show-openclaw-podman-profile"
+      shell: bash
+      run: "echo OpenClaw profile=podman source_dir={{openclaw_source_dir}} quadlet={{openclaw_podman_quadlet}} container_only={{openclaw_podman_container_only}}"
+  healthcheck:
+    - id: "openclaw-podman-health"
+      shell: bash
+      run: |
+        set -euo pipefail
+        command -v podman >/dev/null 2>&1
+        podman --version
+        if id openclaw >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1; then
+          sudo -u openclaw podman ps || true
+          if [ "{{openclaw_podman_quadlet}}" = "true" ]; then
+            sudo systemctl --machine openclaw@ --user status openclaw.service || true
+          fi
+        else
+          podman ps || true
+        fi
+  uninstall:
+    - id: "openclaw-podman-uninstall"
+      shell: bash
+      run: |
+        set -euo pipefail
+        if id openclaw >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1; then
+          if [ "{{openclaw_podman_quadlet}}" = "true" ]; then
+            sudo systemctl --machine openclaw@ --user stop openclaw.service || true
+          fi
+          sudo -u openclaw podman rm -f openclaw || true
+        fi
+artifacts:
+  - id: "openclaw-podman-install-unix"
+    type: "command"
+    commands:
+      - id: "setup-openclaw-podman-unix"
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v git >/dev/null 2>&1; then
+            echo "git is required for podman install."
+            exit 1
+          fi
+          if [ ! -d "{{openclaw_source_dir}}/.git" ]; then
+            git clone https://github.com/openclaw/openclaw.git "{{openclaw_source_dir}}"
+          fi
+          cd "{{openclaw_source_dir}}"
+          export OPENCLAW_DOCKER_APT_PACKAGES="{{openclaw_docker_apt_packages}}"
+          export OPENCLAW_EXTENSIONS="{{openclaw_extensions}}"
+          setup_script=""
+          if [ -x "./scripts/podman/setup.sh" ]; then
+            setup_script="./scripts/podman/setup.sh"
+          elif [ -x "./setup-podman.sh" ]; then
+            setup_script="./setup-podman.sh"
+          else
+            echo "Unable to locate the OpenClaw Podman setup script." >&2
+            exit 1
+          fi
+          launch_script=""
+          if [ -x "./scripts/run-openclaw-podman.sh" ]; then
+            launch_script="./scripts/run-openclaw-podman.sh"
+          elif [ -x "/home/openclaw/run-openclaw-podman.sh" ]; then
+            launch_script="/home/openclaw/run-openclaw-podman.sh"
+          fi
+          setup_args=()
+          if [ "{{openclaw_podman_container_only}}" = "true" ]; then
+            setup_args+=("--container")
+          fi
+          if [ "{{openclaw_podman_quadlet}}" = "true" ]; then
+            export OPENCLAW_PODMAN_QUADLET=1
+            setup_args+=("--quadlet")
+          fi
+          "$setup_script" "${setup_args[@]}"
+          if [ "{{openclaw_podman_container_only}}" != "true" ] && [ "{{openclaw_podman_quadlet}}" != "true" ] && [ -n "$launch_script" ]; then
+            "$launch_script" launch
+          fi

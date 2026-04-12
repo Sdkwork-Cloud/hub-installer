@@ -1,0 +1,180 @@
+schemaVersion: "1.0"
+$schema: "../../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "IronClaw Install (Source)"
+  version: "2026.03.19"
+  description: "Clone or update the official IronClaw repository and install it through Cargo."
+  homepage: "https://github.com/nearai/ironclaw"
+platforms:
+  - windows
+  - macos
+  - ubuntu
+variables:
+  hub_software_name: "ironclaw"
+  hub_install_control_level: "managed"
+  repo_url: "https://github.com/nearai/ironclaw.git"
+  destination: "{{hub_work_root}}/ironclaw"
+defaults:
+  sudo: false
+  timeoutMs: 3600000
+installation:
+  method:
+    id: "source-build"
+    label: "Rust source build"
+    type: "source"
+    summary: "Clone the official IronClaw repository and install the binary through Cargo."
+    supported: true
+    documentationUrl: "https://github.com/nearai/ironclaw"
+  alternatives:
+    - id: "windows-installer"
+      label: "Windows MSI"
+      type: "package"
+      summary: "Documented upstream Windows installer package."
+      supported: false
+    - id: "powershell-script"
+      label: "PowerShell installer"
+      type: "script"
+      summary: "Documented upstream PowerShell install script for Windows."
+      supported: false
+    - id: "shell-script"
+      label: "Shell installer"
+      type: "script"
+      summary: "Documented upstream shell install script for macOS, Linux, and WSL."
+      supported: false
+    - id: "homebrew"
+      label: "Homebrew install"
+      type: "package"
+      summary: "Documented upstream Homebrew install path."
+      supported: false
+  directories:
+    installRoot:
+      path: "{{hub_install_root}}"
+      customizable: true
+      purpose: "Managed Cargo install root for the IronClaw binary."
+    workRoot:
+      path: "{{hub_work_root}}"
+      customizable: true
+      purpose: "Repository checkout directory."
+    dataRoot:
+      path: "{{hub_data_root}}"
+      customizable: true
+      purpose: "Managed backup/import root for file-based IronClaw assets."
+    additional:
+      - id: "ironclaw-home"
+        path: "~/.ironclaw"
+        customizable: false
+        purpose: "Bootstrap environment configuration written before the database is available."
+dataLayout:
+  items:
+    - id: "ironclaw-env"
+      title: "IronClaw bootstrap environment"
+      kind: "file"
+      path: "~/.ironclaw/.env"
+      description: "Bootstrap variables such as `DATABASE_URL` and `LLM_BACKEND` that are written before the database connects."
+      includes:
+        - ".env"
+      sensitive: true
+      backupByDefault: true
+      uninstallByDefault: "preserve"
+    - id: "ironclaw-postgres"
+      title: "IronClaw PostgreSQL database"
+      kind: "database"
+      description: "Primary IronClaw data stored in PostgreSQL 15+ with pgvector."
+      includes:
+        - "sessions"
+        - "identities"
+        - "encrypted secrets"
+        - "tool audit log"
+      sensitive: true
+      backupByDefault: true
+      uninstallByDefault: "manual"
+migration:
+  strategies:
+    - id: "openclaw-manual-import"
+      source: "openclaw"
+      title: "Review OpenClaw data before manual IronClaw migration"
+      mode: "manual"
+      summary: "IronClaw stores its primary state in PostgreSQL, so OpenClaw data must be mapped intentionally instead of imported by this profile."
+      supported: false
+      dataItemIds:
+        - "ironclaw-env"
+        - "ironclaw-postgres"
+      warnings:
+        - "IronClaw requires PostgreSQL 15+ with pgvector before application data can be restored."
+        - "OpenClaw files are not imported automatically into IronClaw's PostgreSQL-backed data model."
+dependencies:
+  - id: "git"
+    check:
+      type: "command"
+      name: "git"
+  - id: "cargo"
+    check:
+      type: "command"
+      name: "cargo"
+artifacts:
+  - id: "ironclaw-source"
+    type: "git"
+    repository: "{{repo_url}}"
+    destination: "{{destination}}"
+    strategy: "clone-or-pull"
+    build:
+      - run: "cargo install --path . --locked --force --root \"{{hub_install_root}}\""
+        cwd: "{{destination}}"
+        when:
+          fileExists: "{{destination}}/Cargo.toml"
+lifecycle:
+  preflight:
+    - id: "show-ironclaw-source-profile-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: "echo IronClaw profile=source repo={{repo_url}} destination={{destination}}"
+    - id: "show-ironclaw-source-profile-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: "Write-Host \"IronClaw profile=source repo={{repo_url}} destination={{destination}}\""
+  healthcheck:
+    - id: "ironclaw-source-git"
+      run: "git -C {{destination}} rev-parse --is-inside-work-tree"
+    - id: "ironclaw-source-version-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: "\"{{hub_install_root}}/bin/ironclaw\" --version"
+    - id: "ironclaw-source-version-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: "& \"{{hub_install_root}}\\bin\\ironclaw.exe\" --version"
+  uninstall:
+    - id: "ironclaw-source-uninstall-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: |
+        if command -v cargo >/dev/null 2>&1; then
+          cargo uninstall --root "{{hub_install_root}}" ironclaw || true
+        fi
+        rm -f "{{hub_install_root}}/bin/ironclaw" || true
+        if [ -d "{{destination}}" ]; then
+          rm -rf "{{destination}}"
+        fi
+    - id: "ironclaw-source-uninstall-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        if (Get-Command cargo -ErrorAction SilentlyContinue) {
+          try {
+            cargo uninstall --root "{{hub_install_root}}" ironclaw
+          } catch {
+            Write-Host "IronClaw was not registered with cargo uninstall."
+          }
+        }
+        if (Test-Path "{{hub_install_root}}\\bin\\ironclaw.exe") {
+          Remove-Item "{{hub_install_root}}\\bin\\ironclaw.exe" -Force -ErrorAction SilentlyContinue
+        }
+        if (Test-Path "{{destination}}") {
+          Remove-Item "{{destination}}" -Recurse -Force -ErrorAction SilentlyContinue
+        }

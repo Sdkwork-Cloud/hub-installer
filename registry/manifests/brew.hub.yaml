@@ -1,0 +1,195 @@
+schemaVersion: "1.0"
+$schema: "../../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "Homebrew Install"
+  version: "2026.03.20"
+  description: "Install Homebrew on macOS, Ubuntu, or inside WSL from a Windows host."
+  homepage: "https://brew.sh/"
+platforms:
+  - windows
+  - macos
+  - ubuntu
+defaults:
+  sudo: false
+  timeoutMs: 1800000
+installation:
+  method:
+    id: "homebrew"
+    label: "Homebrew install"
+    type: "package"
+    summary: "Install Homebrew directly on macOS or Ubuntu, or bridge into WSL from Windows."
+    supported: true
+    documentationUrl: "https://brew.sh/"
+    notes:
+      - "Windows hosts install Linux Homebrew inside the selected WSL distribution."
+  alternatives:
+    - id: "linuxbrew"
+      label: "Linuxbrew"
+      type: "package"
+      summary: "Install Linux Homebrew directly on Linux or WSL."
+      supported: true
+  directories:
+    installRoot:
+      path: "{{hub_install_root}}"
+      customizable: false
+      purpose: "Hub Installer tracking root; Homebrew manages its own prefix."
+    additional:
+      - id: "macos-homebrew-prefix"
+        path: "/opt/homebrew"
+        customizable: false
+        purpose: "Default Homebrew prefix on Apple Silicon macOS."
+      - id: "linux-homebrew-prefix"
+        path: "/home/linuxbrew/.linuxbrew"
+        customizable: false
+        purpose: "Default Homebrew prefix on Ubuntu and WSL."
+dependencies:
+  - id: "git"
+    description: "Git is recommended before installing Homebrew-managed formulae."
+    check:
+      type: "command"
+      name: "git"
+    install:
+      - id: "install-git-ubuntu"
+        shell: bash
+        when:
+          platforms: [ubuntu]
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git curl build-essential file procps
+      - id: "install-git-macos"
+        shell: bash
+        when:
+          platforms: [macos]
+        run: |
+          if ! command -v git >/dev/null 2>&1; then
+            xcode-select --install || true
+          fi
+      - id: "install-git-win"
+        shell: powershell
+        when:
+          platforms: [windows]
+        run: |
+          if (Get-Command winget -ErrorAction SilentlyContinue) {
+            winget install --id Git.Git --accept-package-agreements --accept-source-agreements
+          } elseif (Get-Command choco -ErrorAction SilentlyContinue) {
+            choco install git -y
+          } else {
+            throw "Git is missing and neither winget nor choco is available."
+          }
+lifecycle:
+  preflight:
+    - id: "brew-preflight-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: "echo Installing Homebrew on {{platform}}"
+    - id: "brew-preflight-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
+          throw "WSL is required to install Homebrew from a Windows host."
+        }
+        Write-Host "Installing Homebrew through WSL"
+  healthcheck:
+    - id: "brew-healthcheck-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: |
+        set -euo pipefail
+        if [ -x /opt/homebrew/bin/brew ]; then
+          eval "$(/opt/homebrew/bin/brew shellenv)"
+        elif [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+        fi
+        brew --version
+    - id: "brew-healthcheck-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        $wslArgs = @()
+        if (-not [string]::IsNullOrWhiteSpace("{{hub_wsl_distribution}}")) {
+          $wslArgs += "--distribution"
+          $wslArgs += "{{hub_wsl_distribution}}"
+        }
+        $wslArgs += "--"
+        $wslArgs += "bash"
+        $wslArgs += "-lc"
+        $script = @'
+        set -euo pipefail
+        if [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+        fi
+        brew --version
+        '@
+        & wsl.exe @wslArgs $script
+  uninstall:
+    - id: "brew-uninstall-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: |
+        NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh)"
+    - id: "brew-uninstall-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        $wslArgs = @()
+        if (-not [string]::IsNullOrWhiteSpace("{{hub_wsl_distribution}}")) {
+          $wslArgs += "--distribution"
+          $wslArgs += "{{hub_wsl_distribution}}"
+        }
+        $wslArgs += "--"
+        $wslArgs += "bash"
+        $wslArgs += "-lc"
+        $script = @'
+        set -euo pipefail
+        NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh)"
+        '@
+        & wsl.exe @wslArgs $script
+artifacts:
+  - id: "brew-install-unix"
+    type: "command"
+    when:
+      platforms: [macos, ubuntu]
+    commands:
+      - id: "install-brew-unix"
+        shell: bash
+        run: |
+          set -euo pipefail
+          NONINTERACTIVE=1 CI=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          if [ -x /opt/homebrew/bin/brew ]; then
+            eval "$(/opt/homebrew/bin/brew shellenv)"
+          elif [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
+            eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          fi
+          brew --version
+  - id: "brew-install-win"
+    type: "command"
+    when:
+      platforms: [windows]
+    commands:
+      - id: "install-brew-win"
+        shell: powershell
+        run: |
+          $wslArgs = @()
+          if (-not [string]::IsNullOrWhiteSpace("{{hub_wsl_distribution}}")) {
+            $wslArgs += "--distribution"
+            $wslArgs += "{{hub_wsl_distribution}}"
+          }
+          $wslArgs += "--"
+          $wslArgs += "bash"
+          $wslArgs += "-lc"
+          $script = @'
+          set -euo pipefail
+          NONINTERACTIVE=1 CI=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          if [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
+            eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          fi
+          brew --version
+          '@
+          & wsl.exe @wslArgs $script

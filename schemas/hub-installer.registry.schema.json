@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hub-installer.dev/schemas/hub-installer.registry.schema.json",
+  "title": "hub-installer software registry schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "metadata", "entries"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/entry" }
+    }
+  },
+  "$defs": {
+    "platform": {
+      "type": "string",
+      "enum": ["windows", "macos", "ubuntu", "android", "ios"]
+    },
+    "manifestByPlatform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["byPlatform"],
+      "properties": {
+        "byPlatform": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "windows": { "type": "string", "minLength": 1 },
+            "macos": { "type": "string", "minLength": 1 },
+            "ubuntu": { "type": "string", "minLength": 1 },
+            "android": { "type": "string", "minLength": 1 },
+            "ios": { "type": "string", "minLength": 1 }
+          }
+        },
+        "fallback": { "type": "string", "minLength": 1 }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "manifest"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "aliases": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "description": { "type": "string" },
+        "homepage": { "type": "string" },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "manifest": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "$ref": "#/$defs/manifestByPlatform" }
+          ]
+        },
+        "variables": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    }
+  }
+}
+

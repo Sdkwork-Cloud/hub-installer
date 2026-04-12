@@ -1,0 +1,342 @@
+schemaVersion: "1.0"
+$schema: "../../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "OpenClaw Install (Installer Script Git Mode)"
+  version: "2026.03.08"
+  description: "Install OpenClaw using install.sh/install.ps1 in git mode."
+  homepage: "https://docs.openclaw.ai/install/installer"
+platforms:
+  - windows
+  - macos
+  - ubuntu
+variables:
+  hub_software_name: "openclaw"
+  hub_install_control_level: "partial"
+  openclaw_channel: "latest"
+  openclaw_onboard: "true"
+  openclaw_source_dir: "{{hub_work_root}}"
+  openclaw_git_update: "true"
+  openclaw_installer_no_prompt: "false"
+  openclaw_installer_dry_run: "false"
+  openclaw_installer_verbose: "false"
+defaults:
+  sudo: true
+  timeoutMs: 1800000
+  env:
+    SHARP_IGNORE_GLOBAL_LIBVIPS: "1"
+lifecycle:
+  preflight:
+    - id: "show-openclaw-installer-git-profile-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: "echo OpenClaw profile=installer-script-git source_dir={{openclaw_source_dir}} onboard={{openclaw_onboard}} no_prompt={{openclaw_installer_no_prompt}} dry_run={{openclaw_installer_dry_run}} verbose={{openclaw_installer_verbose}}"
+    - id: "show-openclaw-installer-git-profile-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        Write-Host "OpenClaw profile=installer-script-git source_dir={{openclaw_source_dir}} onboard={{openclaw_onboard}}"
+        Write-Host "[*] hub-installer: WSL2 is strongly recommended for OpenClaw on Windows. Re-run with --effective-runtime-platform wsl for the closest official setup path."
+  healthcheck:
+    - id: "openclaw-git-health-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: |
+        set -euo pipefail
+        command -v openclaw >/dev/null 2>&1
+        openclaw --version
+        openclaw doctor --non-interactive || true
+    - id: "openclaw-git-health-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        openclaw --version
+        openclaw doctor --non-interactive
+artifacts:
+  - id: "openclaw-installer-git-unix"
+    type: "command"
+    when:
+      platforms: [macos, ubuntu]
+    commands:
+      - id: "run-openclaw-installer-git-unix"
+        shell: bash
+        run: |
+          set -euo pipefail
+          extra_flags=""
+          if [ "{{openclaw_onboard}}" != "true" ]; then
+            extra_flags="$extra_flags --no-onboard"
+          fi
+          if [ "{{openclaw_git_update}}" != "true" ]; then
+            extra_flags="$extra_flags --no-git-update"
+          fi
+          if [ "{{openclaw_installer_no_prompt}}" = "true" ]; then
+            extra_flags="$extra_flags --no-prompt"
+          fi
+          if [ "{{openclaw_installer_dry_run}}" = "true" ]; then
+            extra_flags="$extra_flags --dry-run"
+          fi
+          if [ "{{openclaw_installer_verbose}}" = "true" ]; then
+            extra_flags="$extra_flags --verbose"
+          fi
+          curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install.sh | bash -s -- --install-method git --version "{{openclaw_channel}}" --git-dir "{{openclaw_source_dir}}" $extra_flags
+  - id: "openclaw-installer-git-win"
+    type: "command"
+    when:
+      platforms: [windows]
+    commands:
+      - id: "run-openclaw-installer-git-win"
+        shell: powershell
+        run: |
+          function Get-NodeMajorVersion {
+            param(
+              [string]$NodeExecutable = "node"
+            )
+            try {
+              $nodeVersion = (& $NodeExecutable --version 2>$null).Trim()
+              if ($nodeVersion -match "^v(\\d+)") {
+                return [int]$Matches[1]
+              }
+            } catch {
+              # ignore
+            }
+            return 0
+          }
+
+          function Refresh-PathFromSystem {
+            $machinePath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
+            $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+            $env:Path = "$machinePath;$userPath"
+          }
+
+          function Get-NodeExecutableCandidates {
+            $candidates = @(
+              "$env:ProgramFiles\\nodejs\\node.exe",
+              "$env:LOCALAPPDATA\\Programs\\nodejs\\node.exe",
+              "$env:ChocolateyInstall\\bin\\node.exe",
+              "$env:USERPROFILE\\scoop\\apps\\nodejs-lts\\current\\node.exe",
+              "$env:USERPROFILE\\scoop\\shims\\node.exe"
+            )
+
+            try {
+              $whereCandidates = & where.exe node.exe 2>$null
+              if ($whereCandidates) {
+                $candidates += $whereCandidates
+              }
+            } catch {
+              # ignore
+            }
+
+            $deduped = New-Object "System.Collections.Generic.HashSet[string]" ([System.StringComparer]::OrdinalIgnoreCase)
+            $ordered = @()
+            foreach ($candidate in $candidates) {
+              if ([string]::IsNullOrWhiteSpace($candidate)) {
+                continue
+              }
+              $expanded = [Environment]::ExpandEnvironmentVariables($candidate.Trim())
+              if ((Test-Path $expanded) -and $deduped.Add($expanded)) {
+                $ordered += $expanded
+              }
+            }
+            return $ordered
+          }
+
+          function UseNodeExecutablePath {
+            param(
+              [string]$NodeExecutablePath
+            )
+            if (-not $NodeExecutablePath) {
+              return
+            }
+            $candidateDir = Split-Path $NodeExecutablePath -Parent
+            $pathEntries = $env:Path -split ";"
+            if (-not ($pathEntries | Where-Object { $_ -ieq $candidateDir })) {
+              $env:Path = "$candidateDir;$env:Path"
+            }
+          }
+
+          function Get-NodeVersionInfo {
+            param(
+              [string]$NodeExecutable = "node"
+            )
+            try {
+              $nodeVersion = (& $NodeExecutable --version 2>$null).Trim()
+              if ($nodeVersion -match "^v(?<major>\d+)(?:\.(?<minor>\d+))?(?:\.(?<patch>\d+))?") {
+                return @{
+                  Major = [int]$Matches["major"]
+                  Minor = if ($Matches["minor"]) { [int]$Matches["minor"] } else { 0 }
+                  Patch = if ($Matches["patch"]) { [int]$Matches["patch"] } else { 0 }
+                }
+              }
+            } catch {
+              # ignore
+            }
+            return $null
+          }
+
+          function Test-SupportedOpenClawNodeVersion {
+            param(
+              [hashtable]$VersionInfo
+            )
+            if (-not $VersionInfo) {
+              return $false
+            }
+            if ($VersionInfo.Major -ge 24) {
+              return $true
+            }
+            if ($VersionInfo.Major -eq 22 -and $VersionInfo.Minor -ge 16) {
+              return $true
+            }
+            return $false
+          }
+
+          function Get-NodeVersionRank {
+            param(
+              [hashtable]$VersionInfo
+            )
+            if (-not $VersionInfo) {
+              return -1
+            }
+            return ($VersionInfo.Major * 1000000) + ($VersionInfo.Minor * 1000) + $VersionInfo.Patch
+          }
+
+          function TryActivateSupportedNode {
+            $bestNodePath = $null
+            $bestNodeRank = -1
+            foreach ($candidate in Get-NodeExecutableCandidates) {
+              $candidateVersion = Get-NodeVersionInfo -NodeExecutable $candidate
+              if (-not (Test-SupportedOpenClawNodeVersion -VersionInfo $candidateVersion)) {
+                continue
+              }
+              $candidateRank = Get-NodeVersionRank -VersionInfo $candidateVersion
+              if ($candidateRank -gt $bestNodeRank) {
+                $bestNodeRank = $candidateRank
+                $bestNodePath = $candidate
+              }
+            }
+
+            if ($bestNodePath) {
+              UseNodeExecutablePath -NodeExecutablePath $bestNodePath
+              return $true
+            }
+
+            return $false
+          }
+
+          function Try-InstallNodeViaWinget {
+            if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+              return $false
+            }
+
+            Write-Host "[*] hub-installer: bootstrapping Node.js via winget (OpenJS.NodeJS.LTS)..."
+            try {
+              winget install --id OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements
+            } catch {
+              Write-Host "[!] winget install failed; trying winget upgrade."
+            }
+            try {
+              winget upgrade --id OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements
+            } catch {
+              Write-Host "[!] winget upgrade failed."
+            }
+
+            Refresh-PathFromSystem
+            return $true
+          }
+
+          function Try-InstallNodeViaChoco {
+            if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
+              return $false
+            }
+
+            Write-Host "[*] hub-installer: bootstrapping Node.js via Chocolatey (nodejs-lts)..."
+            try {
+              choco install nodejs-lts -y
+            } catch {
+              Write-Host "[!] choco install failed; trying choco upgrade."
+            }
+            try {
+              choco upgrade nodejs-lts -y
+            } catch {
+              Write-Host "[!] choco upgrade failed."
+            }
+
+            Refresh-PathFromSystem
+            return $true
+          }
+
+          function Try-InstallNodeViaScoop {
+            if (-not (Get-Command scoop -ErrorAction SilentlyContinue)) {
+              return $false
+            }
+
+            Write-Host "[*] hub-installer: bootstrapping Node.js via Scoop (nodejs-lts)..."
+            try {
+              scoop install nodejs-lts
+            } catch {
+              Write-Host "[!] scoop install failed; trying scoop update."
+            }
+            try {
+              scoop update nodejs-lts
+            } catch {
+              Write-Host "[!] scoop update failed."
+            }
+
+            Refresh-PathFromSystem
+            return $true
+          }
+
+          function Ensure-SupportedNodeForOpenClawInstaller {
+            $currentNodeVersion = Get-NodeVersionInfo
+            if (Test-SupportedOpenClawNodeVersion -VersionInfo $currentNodeVersion) {
+              return
+            }
+            if (TryActivateSupportedNode) {
+              return
+            }
+
+            Write-Host "[*] hub-installer: Node.js 24 LTS is recommended for OpenClaw on Windows. Node.js 22.16+ remains supported. Attempting bootstrap..."
+
+            $attemptedBootstrap = $false
+            foreach ($bootstrapper in @("winget", "choco", "scoop")) {
+              $ran = $false
+              switch ($bootstrapper) {
+                "winget" { $ran = Try-InstallNodeViaWinget }
+                "choco" { $ran = Try-InstallNodeViaChoco }
+                "scoop" { $ran = Try-InstallNodeViaScoop }
+              }
+              if ($ran) {
+                $attemptedBootstrap = $true
+              }
+              if (TryActivateSupportedNode) {
+                return
+              }
+            }
+
+            if ($attemptedBootstrap) {
+              throw "Node.js bootstrap completed, but no supported Node.js runtime was found in this session. Open a new terminal and run hub-installer openclaw again, re-run with --effective-runtime-platform wsl, or run: hub-installer nodejs fnm"
+            }
+
+            throw "Node.js 24 LTS is recommended for OpenClaw on Windows, and Node.js 22.16+ remains supported. WSL2 is strongly recommended; retry with --effective-runtime-platform wsl or install Node.js manually."
+          }
+
+          Ensure-SupportedNodeForOpenClawInstaller
+
+          $installer = [scriptblock]::Create((iwr -useb https://openclaw.ai/install.ps1))
+          $installerArgs = @{
+            InstallMethod = "git"
+            Tag = "{{openclaw_channel}}"
+            GitDir = "{{openclaw_source_dir}}"
+          }
+          if ("{{openclaw_onboard}}" -ne "true") {
+            $installerArgs.NoOnboard = $true
+          }
+          if ("{{openclaw_git_update}}" -ne "true") {
+            $installerArgs.NoGitUpdate = $true
+          }
+          if ("{{openclaw_installer_dry_run}}" -eq "true") {
+            $installerArgs.DryRun = $true
+          }
+          & $installer @installerArgs

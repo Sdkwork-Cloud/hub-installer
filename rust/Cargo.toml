@@ -1,0 +1,33 @@
+[package]
+name = "hub-installer-rs"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Rust implementation of the hub-installer manifest and registry driven software installer"
+repository = "https://example.invalid/hub-installer"
+
+[lib]
+name = "hub_installer_rs"
+path = "src/lib.rs"
+
+[[bin]]
+name = "hub-installer-rs"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.6.0", features = ["derive"] }
+dirs = "6.0.0"
+reqwest = { version = "0.13.2", default-features = false, features = ["blocking", "json", "rustls"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+serde_yaml = "0.9.34"
+sha2 = "0.11.0"
+tempfile = "3.27.0"
+thiserror = "2.0.18"
+time = { version = "0.3.47", features = ["formatting"] }
+url = "2.5.8"
+wait-timeout = "0.2.1"
+which = "8.0.2"
+
+[dev-dependencies]
+pretty_assertions = "1.4.1"

@@ -1,0 +1,19 @@
+schemaVersion: "1.0"
+$schema: "../../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "Directory Source Example"
+  version: "1.0.0"
+  description: "Example manifest discovered automatically when applying a directory source."
+platforms:
+  - windows
+  - macos
+  - ubuntu
+lifecycle:
+  preflight:
+    - run: "echo directory manifest discovered successfully"
+artifacts:
+  - id: "demo-command"
+    type: "command"
+    commands:
+      - run: "echo running directory source example"
+

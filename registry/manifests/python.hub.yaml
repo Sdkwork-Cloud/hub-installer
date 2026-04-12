@@ -1,0 +1,267 @@
+schemaVersion: "1.0"
+$schema: "../../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "Python Install (Multi-Method)"
+  version: "2026.03.08"
+  description: "Install Python with OS package managers, pyenv, or uv."
+  homepage: "https://www.python.org/"
+platforms:
+  - windows
+  - macos
+  - ubuntu
+variables:
+  python_install_method: "os-package"
+  python_version: "3.13"
+  python_windows_package_manager: "winget"
+  python_windows_package_id: "Python.Python.{{python_version}}"
+  python_install_pipx: "false"
+defaults:
+  sudo: true
+  timeoutMs: 1200000
+lifecycle:
+  preflight:
+    - id: "show-python-method-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: "echo Python install method={{python_install_method}} version={{python_version}}"
+    - id: "show-python-method-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: "Write-Host \"Python install method={{python_install_method}} version={{python_version}} manager={{python_windows_package_manager}}\""
+    - id: "validate-python-method-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: |
+        case "{{python_install_method}}" in
+          os-package|pyenv|uv) ;;
+          *)
+            echo "Unsupported python_install_method on Unix: {{python_install_method}}"
+            echo "Supported methods: os-package, pyenv, uv"
+            exit 1
+            ;;
+        esac
+    - id: "validate-python-method-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        $supported = @("os-package", "uv")
+        if ($supported -notcontains "{{python_install_method}}") {
+          Write-Error "Unsupported python_install_method on Windows: {{python_install_method}}"
+          Write-Error "Supported methods on Windows: os-package, uv"
+          exit 1
+        }
+        if ("{{python_install_method}}" -eq "os-package") {
+          $managers = @("winget", "choco")
+          if ($managers -notcontains "{{python_windows_package_manager}}") {
+            Write-Error "Unsupported python_windows_package_manager: {{python_windows_package_manager}}"
+            Write-Error "Supported managers: winget, choco"
+            exit 1
+          }
+        }
+  configure:
+    - id: "pipx-install-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      continueOnError: true
+      run: |
+        if [ "{{python_install_pipx}}" = "true" ]; then
+          method="{{python_install_method}}"
+          case "$method" in
+            uv)
+              command -v uv >/dev/null 2>&1
+              uv tool install pipx || true
+              uv tool run pipx ensurepath || true
+              ;;
+            *)
+              (python3 -m pip install --user pipx || python -m pip install --user pipx)
+              (python3 -m pipx ensurepath || python -m pipx ensurepath) || true
+              ;;
+          esac
+        fi
+    - id: "pipx-install-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      continueOnError: true
+      run: |
+        if ("{{python_install_pipx}}" -eq "true") {
+          if ("{{python_install_method}}" -eq "uv") {
+            uv tool install pipx
+            uv tool run pipx ensurepath
+          } else {
+            python -m pip install --user pipx
+            python -m pipx ensurepath
+          }
+        }
+  healthcheck:
+    - id: "python-healthcheck-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: |
+        set -euo pipefail
+        method="{{python_install_method}}"
+        version="{{python_version}}"
+
+        case "$method" in
+          os-package)
+            python3 --version || python --version
+            (python3 -m pip --version || python -m pip --version) || true
+            ;;
+          pyenv)
+            export PYENV_ROOT="$HOME/.pyenv"
+            export PATH="$PYENV_ROOT/bin:$PATH"
+            command -v pyenv >/dev/null 2>&1
+            eval "$(pyenv init -)"
+            pyenv versions --bare | grep -E "^${version}(\\.|$)"
+            pyenv global "$version"
+            python --version
+            python -m pip --version || true
+            ;;
+          uv)
+            command -v uv >/dev/null 2>&1
+            uv --version
+            uv python list | grep -E "${version}"
+            ;;
+        esac
+    - id: "python-healthcheck-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        $method = "{{python_install_method}}"
+        $version = "{{python_version}}"
+
+        switch ($method) {
+          "os-package" {
+            python --version
+            python -m pip --version
+          }
+          "uv" {
+            uv --version
+            $list = uv python list | Out-String
+            if ($list -notmatch [Regex]::Escape($version)) {
+              throw "uv does not report Python $version as installed."
+            }
+          }
+          default {
+            throw "Unsupported method: $method"
+          }
+        }
+artifacts:
+  - id: "python-install-unix"
+    type: "command"
+    when:
+      platforms: [macos, ubuntu]
+    commands:
+      - id: "python-install-unix-dispatch"
+        shell: bash
+        run: |
+          set -euo pipefail
+          method="{{python_install_method}}"
+          version="{{python_version}}"
+
+          run_as_root() {
+            if [ "$(id -u)" -eq 0 ]; then
+              "$@"
+            else
+              sudo "$@"
+            fi
+          }
+
+          case "$method" in
+            os-package)
+              if [ "{{platform}}" = "macos" ]; then
+                brew install "python@${version}" || brew install python
+              else
+                run_as_root apt-get update
+                run_as_root apt-get install -y python3 python3-pip python3-venv
+              fi
+              ;;
+            pyenv)
+              if [ "{{platform}}" = "ubuntu" ]; then
+                run_as_root apt-get update
+                run_as_root apt-get install -y make build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev curl llvm libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
+              else
+                brew install openssl readline sqlite3 xz zlib tcl-tk || true
+              fi
+              if [ ! -d "$HOME/.pyenv" ]; then
+                git clone https://github.com/pyenv/pyenv.git "$HOME/.pyenv"
+              fi
+              export PYENV_ROOT="$HOME/.pyenv"
+              export PATH="$PYENV_ROOT/bin:$PATH"
+              eval "$(pyenv init -)"
+              pyenv install -s "$version"
+              pyenv global "$version"
+              ;;
+            uv)
+              if ! command -v uv >/dev/null 2>&1; then
+                curl -LsSf https://astral.sh/uv/install.sh | sh
+              fi
+              if ! command -v uv >/dev/null 2>&1; then
+                export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+              fi
+              if ! command -v uv >/dev/null 2>&1; then
+                echo "uv installer completed but uv command is not in PATH."
+                exit 1
+              fi
+              uv python install "$version"
+              uv python pin --global "$version" || true
+              ;;
+            *)
+              echo "Unsupported method: $method"
+              exit 1
+              ;;
+          esac
+  - id: "python-install-windows"
+    type: "command"
+    when:
+      platforms: [windows]
+    commands:
+      - id: "python-install-win-dispatch"
+        shell: powershell
+        run: |
+          $method = "{{python_install_method}}"
+          $version = "{{python_version}}"
+          switch ($method) {
+            "os-package" {
+              $manager = "{{python_windows_package_manager}}"
+              if ($manager -eq "winget") {
+                winget install --id "{{python_windows_package_id}}" --accept-package-agreements --accept-source-agreements
+              } elseif ($manager -eq "choco") {
+                choco install python -y
+              } else {
+                throw "Unsupported manager: $manager"
+              }
+            }
+            "uv" {
+              if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+                powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+              }
+              $uvCandidates = @(
+                "uv",
+                "$env:USERPROFILE\\.local\\bin\\uv.exe",
+                "$env:USERPROFILE\\.cargo\\bin\\uv.exe"
+              )
+              $uvExe = $null
+              foreach ($candidate in $uvCandidates) {
+                $cmd = Get-Command $candidate -ErrorAction SilentlyContinue
+                if ($cmd) {
+                  $uvExe = $cmd.Source
+                  break
+                }
+              }
+              if (-not $uvExe) {
+                throw "uv executable not found after installation."
+              }
+              & $uvExe python install $version
+            }
+            default {
+              throw "Unsupported method: $method"
+            }
+          }

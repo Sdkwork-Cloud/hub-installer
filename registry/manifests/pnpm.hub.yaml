@@ -1,0 +1,152 @@
+schemaVersion: "1.0"
+$schema: "../../schemas/hub-installer.manifest.schema.json"
+metadata:
+  name: "pnpm Install"
+  version: "2026.03.20"
+  description: "Install or refresh pnpm through Corepack on top of Node.js."
+  homepage: "https://pnpm.io/"
+platforms:
+  - windows
+  - macos
+  - ubuntu
+variables:
+  pnpm_version: "latest"
+defaults:
+  sudo: true
+  timeoutMs: 1200000
+installation:
+  method:
+    id: "pnpm-global"
+    label: "Corepack pnpm activation"
+    type: "package"
+    summary: "Install or refresh pnpm through Corepack on the selected host."
+    supported: true
+    documentationUrl: "https://pnpm.io/installation"
+    notes:
+      - "Corepack is enabled before pnpm is activated."
+  alternatives:
+    - id: "npm-global"
+      label: "npm global install"
+      type: "package"
+      summary: "Install pnpm through npm when Corepack is unavailable."
+      supported: false
+  directories:
+    installRoot:
+      path: "{{hub_install_root}}"
+      customizable: false
+      purpose: "Hub Installer tracking root; pnpm activation remains package-manager controlled."
+dependencies:
+  - id: "nodejs"
+    description: "Node.js is required before Corepack can activate pnpm."
+    check:
+      type: "command"
+      name: "node"
+    install:
+      - id: "install-nodejs-unix"
+        shell: bash
+        when:
+          platforms: [macos, ubuntu]
+        run: |
+          if [ "{{platform}}" = "macos" ]; then
+            brew install node
+          else
+            sudo apt-get update
+            sudo apt-get install -y curl ca-certificates nodejs npm
+          fi
+      - id: "install-nodejs-win"
+        shell: powershell
+        when:
+          platforms: [windows]
+        run: |
+          if (Get-Command winget -ErrorAction SilentlyContinue) {
+            winget install --id OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements
+          } elseif (Get-Command choco -ErrorAction SilentlyContinue) {
+            choco install nodejs-lts -y
+          } else {
+            throw "Node.js is missing and neither winget nor choco is available."
+          }
+lifecycle:
+  preflight:
+    - id: "show-pnpm-version-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: "echo pnpm version={{pnpm_version}}"
+    - id: "show-pnpm-version-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: "Write-Host \"pnpm version={{pnpm_version}}\""
+  healthcheck:
+    - id: "pnpm-healthcheck-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: |
+        set -euo pipefail
+        node --version
+        pnpm --version
+    - id: "pnpm-healthcheck-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        node --version
+        pnpm --version
+  uninstall:
+    - id: "pnpm-uninstall-unix"
+      shell: bash
+      when:
+        platforms: [macos, ubuntu]
+      run: |
+        if command -v corepack >/dev/null 2>&1; then
+          corepack disable pnpm || true
+        fi
+        if command -v npm >/dev/null 2>&1; then
+          npm uninstall -g pnpm || true
+        fi
+    - id: "pnpm-uninstall-win"
+      shell: powershell
+      when:
+        platforms: [windows]
+      run: |
+        if (Get-Command corepack -ErrorAction SilentlyContinue) {
+          try {
+            corepack disable pnpm
+          } catch {
+            Write-Host "corepack disable pnpm returned non-zero; continuing."
+          }
+        }
+        if (Get-Command npm -ErrorAction SilentlyContinue) {
+          try {
+            npm uninstall -g pnpm
+          } catch {
+            Write-Host "pnpm was not removed through npm."
+          }
+        }
+artifacts:
+  - id: "pnpm-refresh"
+    type: "command"
+    commands:
+      - id: "activate-pnpm-unix"
+        shell: bash
+        when:
+          platforms: [macos, ubuntu]
+        run: |
+          set -euo pipefail
+          if ! command -v node >/dev/null 2>&1; then
+            echo "Node.js is unavailable. Install dependencies first." >&2
+            exit 1
+          fi
+          corepack enable
+          corepack prepare "pnpm@{{pnpm_version}}" --activate
+      - id: "activate-pnpm-win"
+        shell: powershell
+        when:
+          platforms: [windows]
+        run: |
+          if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+            throw "Node.js is unavailable. Install dependencies first."
+          }
+          corepack enable
+          corepack prepare "pnpm@{{pnpm_version}}" --activate
