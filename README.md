@@ -625,3 +625,42 @@ console.log({
 - On Windows + WSL, manifest commands can execute through `wsl.exe` while install records, backups, and uninstall still use host-accessible paths.
 - Archive installs (`zip`/`tar`) require `archiveEntry` or `archiveCommand`.
 - For private HuggingFace artifacts, use `tokenEnv` and export token via environment variable.
+
+## SDKWork Documentation Contract
+
+Domain: device
+Capability: hub-installer
+Package type: node-package
+Status: standard
+
+### Public API
+
+Public exports are declared in `specs/component.spec.json` under `contracts.publicExports`.
+
+### Required SDK Surface
+
+- None declared in `specs/component.spec.json`.
+
+### Configuration
+
+Configuration keys and runtime entrypoints are declared in `specs/component.spec.json`.
+
+### SaaS/Private/Local Behavior
+
+This module follows the canonical standards linked from `specs/component.spec.json`, including deployment and runtime configuration rules where applicable.
+
+### Security
+
+Do not add secrets, live tokens, manual auth headers, or app-local credential handling to this module.
+
+### Extension Points
+
+Extension points are limited to declared public exports, runtime entrypoints, SDK clients, events, and config keys.
+
+### Verification
+
+- `pnpm typecheck`
+
+### Owner And Status
+
+Owner and lifecycle status are tracked in `specs/component.spec.json`.
