@@ -1,4 +1,4 @@
 interface:
   display_name: "Hub Installer App SDK Real Logic"
   short_description: "Guide remote install features onto generated app SDKs."
-  default_prompt: "Use $hub-installer-app-sdk-real-logic to keep hub-installer local-first while routing remote business capabilities through spring-ai-plus-app-api and generated app SDKs."
+  default_prompt: "Use $hub-installer-app-sdk-real-logic to keep hub-installer local-first while routing remote business capabilities through application-root product SDK families or typed product client ports."

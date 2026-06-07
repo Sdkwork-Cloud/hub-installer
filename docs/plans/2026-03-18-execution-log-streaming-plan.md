@@ -13,8 +13,8 @@
 ### Task 1: Extend progress event contracts
 
 **Files:**
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\rust\src\progress.rs`
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\rust\tests\progress_contract.rs`
+- Modify: `<workspace-root>\hub-installer\rust\src\progress.rs`
+- Modify: `<workspace-root>\hub-installer\rust\tests\progress_contract.rs`
 
 **Step 1: Write the failing test**
 
@@ -46,8 +46,8 @@ Expected: PASS
 ### Task 2: Stream process output from executor
 
 **Files:**
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\rust\src\executor.rs`
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\rust\tests\executor_contract.rs`
+- Modify: `<workspace-root>\hub-installer\rust\src\executor.rs`
+- Modify: `<workspace-root>\hub-installer\rust\tests\executor_contract.rs`
 
 **Step 1: Write the failing test**
 
@@ -81,7 +81,7 @@ Expected: PASS
 ### Task 3: Wire CLI to real-time progress rendering
 
 **Files:**
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\rust\src\cli.rs`
+- Modify: `<workspace-root>\hub-installer\rust\src\cli.rs`
 
 **Step 1: Write the failing test**
 

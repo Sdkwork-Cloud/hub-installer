@@ -13,9 +13,9 @@
 ### Task 1: Add the docs-site scaffold
 
 **Files:**
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\package.json`
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\pnpm-lock.yaml`
-- Create: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\docs\.vitepress\config.mts`
+- Modify: `<workspace-root>\hub-installer\package.json`
+- Modify: `<workspace-root>\hub-installer\pnpm-lock.yaml`
+- Create: `<workspace-root>\hub-installer\docs\.vitepress\config.mts`
 
 **Step 1: Write the failing setup expectation**
 
@@ -40,11 +40,11 @@ Expected: lockfile updates cleanly and VitePress is available locally.
 ### Task 2: Create the high-level overview and guide pages
 
 **Files:**
-- Create: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\docs\index.md`
-- Create: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\docs\guide\getting-started.md`
-- Create: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\docs\guide\architecture.md`
-- Create: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\docs\guide\runtime-and-docker.md`
-- Create: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\docs\guide\troubleshooting.md`
+- Create: `<workspace-root>\hub-installer\docs\index.md`
+- Create: `<workspace-root>\hub-installer\docs\guide\getting-started.md`
+- Create: `<workspace-root>\hub-installer\docs\guide\architecture.md`
+- Create: `<workspace-root>\hub-installer\docs\guide\runtime-and-docker.md`
+- Create: `<workspace-root>\hub-installer\docs\guide\troubleshooting.md`
 
 **Step 1: Write the content skeleton**
 
@@ -66,9 +66,9 @@ Run a docs build later and fix any broken links or bad frontmatter assumptions.
 ### Task 3: Document the Node.js/TypeScript surface
 
 **Files:**
-- Create: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\docs\nodejs\overview.md`
-- Create: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\docs\nodejs\library.md`
-- Create: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\docs\nodejs\cli.md`
+- Create: `<workspace-root>\hub-installer\docs\nodejs\overview.md`
+- Create: `<workspace-root>\hub-installer\docs\nodejs\library.md`
+- Create: `<workspace-root>\hub-installer\docs\nodejs\cli.md`
 
 **Step 1: Capture the real public API**
 
@@ -98,11 +98,11 @@ Explicitly state where Node.js is strong today and where Rust has deeper streami
 ### Task 4: Document the Rust surface and Tauri integration
 
 **Files:**
-- Create: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\docs\rust\overview.md`
-- Create: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\docs\rust\library.md`
-- Create: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\docs\rust\cli.md`
-- Create: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\docs\rust\progress-streaming.md`
-- Create: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\docs\rust\tauri.md`
+- Create: `<workspace-root>\hub-installer\docs\rust\overview.md`
+- Create: `<workspace-root>\hub-installer\docs\rust\library.md`
+- Create: `<workspace-root>\hub-installer\docs\rust\cli.md`
+- Create: `<workspace-root>\hub-installer\docs\rust\progress-streaming.md`
+- Create: `<workspace-root>\hub-installer\docs\rust\tauri.md`
 
 **Step 1: Document the embeddable API**
 
@@ -132,11 +132,11 @@ Show a complete example that:
 ### Task 5: Integrate the existing reference specs into the site
 
 **Files:**
-- Modify as needed: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\docs\.vitepress\config.mts`
-- Reuse: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\docs\manifest-spec.md`
-- Reuse: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\docs\registry-spec.md`
-- Reuse: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\docs\install-policy.md`
-- Reuse: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\docs\openclaw-profile-architecture.md`
+- Modify as needed: `<workspace-root>\hub-installer\docs\.vitepress\config.mts`
+- Reuse: `<workspace-root>\hub-installer\docs\manifest-spec.md`
+- Reuse: `<workspace-root>\hub-installer\docs\registry-spec.md`
+- Reuse: `<workspace-root>\hub-installer\docs\install-policy.md`
+- Reuse: `<workspace-root>\hub-installer\docs\openclaw-profile-architecture.md`
 
 **Step 1: Place existing specs in navigation**
 

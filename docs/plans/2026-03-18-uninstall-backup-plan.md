@@ -13,12 +13,12 @@
 ### Task 1: Extend manifest/runtime contracts
 
 **Files:**
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\src\manifest\types.ts`
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\src\manifest\validate.ts`
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\src\manifest\template.ts`
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\src\manifest\template.test.ts`
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\schemas\hub-installer.manifest.schema.json`
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\rust\src\manifest.rs`
+- Modify: `<workspace-root>\hub-installer\src\manifest\types.ts`
+- Modify: `<workspace-root>\hub-installer\src\manifest\validate.ts`
+- Modify: `<workspace-root>\hub-installer\src\manifest\template.ts`
+- Modify: `<workspace-root>\hub-installer\src\manifest\template.test.ts`
+- Modify: `<workspace-root>\hub-installer\schemas\hub-installer.manifest.schema.json`
+- Modify: `<workspace-root>\hub-installer\rust\src\manifest.rs`
 
 **Step 1: Write the failing tests**
 
@@ -49,9 +49,9 @@ Expected: PASS
 ### Task 2: Add install-record and backup-path state helpers
 
 **Files:**
-- Create: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\src\core\install-records.ts`
-- Create: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\src\core\install-records.test.ts`
-- Create: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\rust\src\state.rs`
+- Create: `<workspace-root>\hub-installer\src\core\install-records.ts`
+- Create: `<workspace-root>\hub-installer\src\core\install-records.test.ts`
+- Create: `<workspace-root>\hub-installer\rust\src\state.rs`
 - Add/update Rust tests as needed
 
 **Step 1: Write the failing tests**
@@ -85,9 +85,9 @@ Expected: PASS
 ### Task 3: Implement Node.js backup and uninstall engine flows
 
 **Files:**
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\src\manifest\executor.ts`
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\src\manifest\index.ts`
-- Add tests under: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\src\manifest\`
+- Modify: `<workspace-root>\hub-installer\src\manifest\executor.ts`
+- Modify: `<workspace-root>\hub-installer\src\manifest\index.ts`
+- Add tests under: `<workspace-root>\hub-installer\src\manifest\`
 
 **Step 1: Write the failing tests**
 
@@ -124,12 +124,12 @@ Expected: PASS
 ### Task 4: Implement Node.js registry and CLI surfaces
 
 **Files:**
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\src\registry\types.ts`
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\src\registry\service.ts`
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\src\registry\index.ts`
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\src\cli.ts`
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\src\cli-output.ts`
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\src\index.ts`
+- Modify: `<workspace-root>\hub-installer\src\registry\types.ts`
+- Modify: `<workspace-root>\hub-installer\src\registry\service.ts`
+- Modify: `<workspace-root>\hub-installer\src\registry\index.ts`
+- Modify: `<workspace-root>\hub-installer\src\cli.ts`
+- Modify: `<workspace-root>\hub-installer\src\cli-output.ts`
+- Modify: `<workspace-root>\hub-installer\src\index.ts`
 - Add/update CLI tests as needed
 
 **Step 1: Write the failing tests**
@@ -162,11 +162,11 @@ Expected: PASS
 ### Task 5: Implement Rust backup and uninstall engine flows
 
 **Files:**
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\rust\src\engine.rs`
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\rust\src\lib.rs`
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\rust\src\manifest.rs`
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\rust\src\cli.rs`
-- Add/update tests under: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\rust\tests\`
+- Modify: `<workspace-root>\hub-installer\rust\src\engine.rs`
+- Modify: `<workspace-root>\hub-installer\rust\src\lib.rs`
+- Modify: `<workspace-root>\hub-installer\rust\src\manifest.rs`
+- Modify: `<workspace-root>\hub-installer\rust\src\cli.rs`
+- Add/update tests under: `<workspace-root>\hub-installer\rust\tests\`
 
 **Step 1: Write the failing tests**
 
@@ -202,11 +202,11 @@ Expected: PASS
 ### Task 6: Update built-in manifests, docs, and examples
 
 **Files:**
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\registry\manifests\openclaw-docker.hub.yaml`
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\examples\openclaw-docker.hub.yaml`
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\README.md`
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\docs\manifest-spec.md`
-- Modify: `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\hub-installer\docs\install-policy.md`
+- Modify: `<workspace-root>\hub-installer\registry\manifests\openclaw-docker.hub.yaml`
+- Modify: `<workspace-root>\hub-installer\examples\openclaw-docker.hub.yaml`
+- Modify: `<workspace-root>\hub-installer\README.md`
+- Modify: `<workspace-root>\hub-installer\docs\manifest-spec.md`
+- Modify: `<workspace-root>\hub-installer\docs\install-policy.md`
 - Modify: VitePress docs under `docs/guide/`, `docs/nodejs/`, `docs/rust/`
 
 **Step 1: Add product-facing examples**
