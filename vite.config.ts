@@ -1,6 +1,6 @@
 import { builtinModules } from "node:module";
 import { resolve } from "node:path";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from 'vite';
 import dts from "vite-plugin-dts";
 
 const nodeExternals = [
@@ -10,8 +10,13 @@ const nodeExternals = [
   "yaml"
 ];
 
-export default defineConfig({
-  plugins: [
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, __dirname, '');
+  return {
+    define: {
+      'process.env.SDKWORK_ACCESS_TOKEN': JSON.stringify(env.SDKWORK_ACCESS_TOKEN ?? ''),
+    },
+      plugins: [
     dts({
       entryRoot: "src",
       include: ["src/**/*.ts"],
