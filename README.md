@@ -1,4 +1,5 @@
 # hub-installer
+repository-kind: application
 
 Cross-platform installer engine built with Node.js + TypeScript + Vite.
 
