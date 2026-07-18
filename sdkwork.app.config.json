@@ -263,7 +263,7 @@
         "content": "Initial SDKWork App Standard v3 manifest for Hub Installer.",
         "highlights": [
           "SDKWork App Standard v3 configuration initialized",
-          "PlusApp projection metadata standardized",
+          "platform_app projection metadata standardized",
           "Download package matrix normalized"
         ],
         "packageIds": [
